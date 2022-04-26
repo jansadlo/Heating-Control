@@ -258,8 +258,8 @@ void loop () {
 
 /*------------------------------------------------------------------------------------------------*/
 
-  // KDYŽ temp je mimo provozní rozsah
-  if(temp_Sensor > TEMP_OPERATIONAL_RANGE_LOW && temp_Sensor < TEMP_OPERATIONAL_RANGE_HIGH)               
+  // KDYŽ temp_Sensor je v provozním rozsahu
+  if (temp_Sensor > TEMP_OPERATIONAL_RANGE_LOW && temp_Sensor < TEMP_OPERATIONAL_RANGE_HIGH)               
   {
     Serial.print(" temp_Sensor: ");
     Serial.print(temp_Sensor);
