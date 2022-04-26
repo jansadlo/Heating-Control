@@ -14,9 +14,11 @@
 #define TEMP_OPERATIONAL_RANGE_LOW   0    // spodní hranice provozního rozsahu teploty
 #define TEMP_OPERATIONAL_RANGE_HIGH  50   // horní hranice provozního rozsahu teploty
 
+#define PIN_POTENTIOMETER            A0   // pin ke střednímu vývodu potenciometru
 
-RTC_DS3231 rtc;                    // vytvoření objektu rtc
-LiquidCrystal_I2C lcd(0x27,20,4);  // vytvoření objektu lcd, LCD je na defaultní adrese 0x27, má 20 znaků, 4 řádky
+
+RTC_DS3231 rtc;                           // vytvoření objektu rtc
+LiquidCrystal_I2C lcd(0x27,20,4);         // vytvoření objektu lcd, LCD je na defaultní adrese 0x27, má 20 znaků, 4 řádky
 OneWire oneWire(TEMP_SENSOR_PIN);         // nastavení oneWire instance na pinu TEMP_SENSOR_PIN
 DallasTemperature sensors(&oneWire);      // pass oneWire to DallasTemperature library
 
@@ -27,7 +29,7 @@ float floatMap(float x, float in_min, float in_max, float out_min, float out_max
   return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;              // rozsahu odporu potenciometru z analogového
 }                                                                                       // vstupu, na rozsah teplot)
 
-    int analogValue = analogRead(A0);                                                                 // čtení vstupu na analogovém pinu A0
+    int analogValue = analogRead(PIN_POTENTIOMETER);                                                  // čtení vstupu na analogovém pinu A0
     float temp_Manual = floatMap(analogValue, 0, 1023, TEMP_MAN_RANGE_MAX, TEMP_MAN_RANGE_MIN);       // deklarace temp_Manual - použití funkce floatMap (přeškálovat na teplotu temp_Manual (rozsah od do))
 
 
