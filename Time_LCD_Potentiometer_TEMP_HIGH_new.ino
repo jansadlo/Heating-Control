@@ -80,7 +80,7 @@ void loop () {
 /*------------------------------------------------------------------------------------------------*/
 
 
-    int analogValue = analogRead(A0);                                                                 // čtení vstupu na analogovém pinu A0
+    int analogValue = analogRead(PIN_POTENTIOMETER);                                                  // čtení vstupu na analogovém pinu A0
     float temp_Manual = floatMap(analogValue, 0, 1023, TEMP_MAN_RANGE_MAX, TEMP_MAN_RANGE_MIN);       // temp_Manual - použití funkce floatMap (přeškálovat na teplotu temp_Manual (rozsah od do))
 
 
