@@ -151,7 +151,7 @@ void loop () {
     lcd.print(now.second(), DEC);         // zobraz na LCD sekundu
   }
     
-    if (bool isDay = true)                // KDYŽ isDay = true
+    if (isDay)                            // KDYŽ isDay = true
   {
     lcd.setCursor(0,1);                   // nastav kurzor na LCD na 0,1
     lcd.print("DEN");                     // zobrazí na LCD "DEN"
@@ -241,7 +241,7 @@ void loop () {
   {                                       //
     Serial.print(now.second(), DEC);      // vypiš na sériovou linku sekundu
   }
-    if (bool isDay = true)                // KDYŽ isDay = true
+    if (isDay)                            // KDYŽ isDay = true
   {
     Serial.print(" DEN; ");               // vypiš na sériovou linku " DEN;"
   }                                       //
