@@ -5,10 +5,10 @@
 #include <DallasTemperature.h>    // DS18B20 knihovna
 
 
-#define NIGHT_BEGINS 22           // DEFINOVAT !!! hodinu kdy začíná noc
-#define NIGHT_ENDS 6              // DEFINOVAT !!! hodinu kdy již není noc
-#define TEMP_MAN_RANGE_MAX 26     // DEFINOVAT !!! maximální teplotu rozsahu TEMP_MAN
-#define TEMP_MAN_RANGE_MIN 16     // DEFINOVAT !!! minimální teplotu rozsahu TEMP_MAN
+#define DAY_BEGINS          6      // DEFINOVAT !!! hodinu kdy začíná den
+#define DAY_ENDS            22     // DEFINOVAT !!! hodinu kdy již není den
+#define TEMP_MAN_RANGE_MAX  26     // DEFINOVAT !!! maximální teplotu rozsahu TEMP_MAN
+#define TEMP_MAN_RANGE_MIN  16     // DEFINOVAT !!! minimální teplotu rozsahu TEMP_MAN
 
 #define TEMP_SENSOR_PIN              2    // Arduino pin připojený k DQ pinu senzoru DS18B20
 #define TEMP_OPERATIONAL_RANGE_LOW   0    // spodní hranice provozního rozsahu teploty
@@ -43,6 +43,8 @@ float temp_ReferenceLow = 0;              // referenční teplota trojného bodu
 float temp_Corrected;                     // teplota kalibrovaného senzoru ve stupních C
 
 
+bool isDay;
+
 void setup () {
   Serial.begin(9600);
 
@@ -68,13 +70,13 @@ void loop () {
     
     DateTime now = rtc.now();
     
-    if (now.hour() >= NIGHT_BEGINS || now.hour() < NIGHT_ENDS)      // KDYŽ HODINA je většíneborovna než NIGHT_BEGINS nebo menší než NIGHT_ENDS
+    if (now.hour() >= DAY_BEGINS && now.hour() < DAY_ENDS)      // KDYŽ HODINA je většíneborovna než DAY_BEGINS nebo menší než DAY_ENDS
   {
-    bool isDay = false;                   // je noc -> isDay = false
+    bool isDay = true;                    // je den -> isDay = true
   }                                       //
     else                                  // JINAK
   {                                       //
-    bool isDay = true;                    // je den -> isDay = true
+    bool isDay = false;                   // je noc -> isDay = false
   }
 
 /*------------------------------------------------------------------------------------------------*/
@@ -149,15 +151,15 @@ void loop () {
     lcd.print(now.second(), DEC);         // zobraz na LCD sekundu
   }
     
-    if (bool isDay = false)               // KDYŽ isDay = false
+    if (bool isDay = true)                // KDYŽ isDay = true
   {
     lcd.setCursor(0,1);                   // nastav kurzor na LCD na 0,1
-    lcd.print("NOC");                     // zobrazí na LCD "NOC"
+    lcd.print("DEN");                     // zobrazí na LCD "DEN"
   }                                       //
     else                                  // JINAK
   {                                       //
     lcd.setCursor(0,1);                   // nastav kurzor na LCD na 0,1
-    lcd.print("DEN");                     // zobrazí na LCD "DEN"
+    lcd.print("NOC");                     // zobrazí na LCD "NOC"
   }
 
 
@@ -239,13 +241,13 @@ void loop () {
   {                                       //
     Serial.print(now.second(), DEC);      // vypiš na sériovou linku sekundu
   }
-    if (bool isDay = false)               // KDYŽ isDay = false
+    if (bool isDay = true)                // KDYŽ isDay = true
   {
-    Serial.print(" NOC; ");               // vypiš na sériovou linku " NOC"
+    Serial.print(" DEN; ");               // vypiš na sériovou linku " DEN;"
   }                                       //
     else                                  // JINAK
   {                                       //
-    Serial.print(" DEN; ");               // vypiš na sériovou linku " DEN"
+    Serial.print(" NOC; ");               // vypiš na sériovou linku " NOC;"
   }
 
 /*------------------------------------------------------------------------------------------------*/
@@ -275,7 +277,7 @@ void loop () {
     Serial.print(" temp_Corrected: ");
     Serial.print(temp_Corrected);
     Serial.print("°C");
-    
+
     Serial.println(" TEMPERATURE OUT OF RANGE - ERROR");
   }
 
