@@ -70,7 +70,7 @@ void loop () {
     
     DateTime now = rtc.now();
     
-    if (now.hour() >= DAY_BEGINS && now.hour() < DAY_ENDS)      // KDYŽ HODINA je většíneborovna než DAY_BEGINS nebo menší než DAY_ENDS
+    if (now.hour(), DEC >= DAY_BEGINS && now.hour(), DEC < DAY_ENDS)      // KDYŽ HODINA je většíneborovna než DAY_BEGINS nebo menší než DAY_ENDS
   {
     bool isDay = true;                    // je den -> isDay = true
   }                                       //
