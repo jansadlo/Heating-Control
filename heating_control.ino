@@ -17,6 +17,9 @@
 #define TEMP_OPERATIONAL_RANGE_HIGH  50   // horní hranice provozního rozsahu teploty
 #define MOVING_AVG_WIN_SIZE          10   // počet průměrovaných hodnot klouzavého průměru
 
+#define PIN_WINDOW                   3    // pin od relé okna
+#define PIN_MODE_SWITCH              4    // pin přepínače módu
+
 
 
 
@@ -48,7 +51,11 @@ float temp_Corrected;                     // teplota kalibrovaného senzoru ve s
 float temp_Average;                       // klouzavý průměr temp_Corrected
 
 
-bool isDay;
+bool isDay;                               // proměnná - je den
+
+bool windowClosed;                        // proměnná - okno zavřené
+bool modeMinimal;                         // proměnná - minimální teplotní mód
+
 
 void setup () {
   Serial.begin(9600);
@@ -64,7 +71,14 @@ void setup () {
                                                             // TENTO ŘÁDEK !!!!! ODSTRANIT !!!!!
                                                             // (jinak by se při resetu či výpadku napětí tento pevně stanovený čas do RTC nahrál znovu)
 
+
   sensors.begin();                        // inicializace senzoru
+
+
+  pinMode(PIN_WINDOW, INPUT_PULLUP);         // konfigurovat PIN_WINDOW jako vstup, nastavit interní pullup
+  pinMode(PIN_MODE_SWITCH, INPUT_PULLUP);    // konfigurovat PIN_MODE_SWITCH jako vstup, nastavit interní pullup
+  pinMode(13, OUTPUT);                       // pin s interní LED konfigurovat jako výstup
+
 
   lcd.init();                             // inicializace LCD
   lcd.backlight();                        // zapnutí podsvícení (vypnutí podsvícení by bylo "lcd.noBacklight();)
@@ -96,18 +110,28 @@ void loop () {
 --------------------------------------------------------------------------------------------------*/
 
 
-  sensors.requestTemperatures();                       // příkaz k získání teploty
-  float temp_Sensor = sensors.getTempCByIndex(0);      // čtení teploty ve stupních C
+    sensors.requestTemperatures();                       // příkaz k získání teploty
+    float temp_Sensor = sensors.getTempCByIndex(0);      // čtení teploty ve stupních C
 
 
-  // KALIBRACE temp_Sensor --> temp_Corrected
-  float temp_RawRange = temp_RawHigh - temp_RawLow;
-  float temp_ReferenceRange = temp_ReferenceHigh - temp_ReferenceLow;
-  float temp_Corrected = (((temp_Sensor - temp_RawLow) * temp_ReferenceRange) / temp_RawRange) + temp_ReferenceLow;
+    // KALIBRACE temp_Sensor --> temp_Corrected
+    float temp_RawRange = temp_RawHigh - temp_RawLow;
+    float temp_ReferenceRange = temp_ReferenceHigh - temp_ReferenceLow;
+    float temp_Corrected = (((temp_Sensor - temp_RawLow) * temp_ReferenceRange) / temp_RawRange) + temp_ReferenceLow;
 
-  temp_Average = movingAverage(temp_Corrected);
+    temp_Average = movingAverage(temp_Corrected);
 
+/*------------------------------------------------------------------------------------------------*/
 
+  windowClosed = digitalRead(PIN_WINDOW);     // nastavit windowClosed podle vstupu
+                                              // obvod rozpojen windowClosed = TRUE
+                                              // obvod uzavřen windowClosed = FALSE
+  
+  modeMinimal = digitalRead(PIN_MODE_SWITCH); // nastavit modeManual podle vstupu
+                                              // obvod rozpojen modeManual = TRUE
+                                              // obvod uzavřen modeManual = FALSE
+
+    
 /*--------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 --------------------------------------------------------------------------------------------------*/
@@ -171,7 +195,7 @@ void loop () {
 
 
     lcd.setCursor(5,1);                   // nastav kurzor na LCD na 5,1
-    lcd.print("TEMP_MAN:");               // zobraz na LCD "TEMP_MAN:"
+    lcd.print("T_MANUAL:");               // zobraz na LCD "TEMP_MAN:"
     lcd.setCursor(14,1);                  // nastav kurzor na LCD na 14,1
     lcd.print(temp_Manual,1);             // zobraz na LCD proměnnou temp_Manual, jedno desetinné místo
     lcd.setCursor(18,1);                  // nastav kurzor na 18,1
@@ -180,14 +204,38 @@ void loop () {
     lcd.print("C");                       // zobraz na LCD "C"
 
 
-    lcd.setCursor(9,0);                   // nastav kurzor na LCD na 9,0
-    lcd.print("TEMP:");                   // zobraz na LCD "TEMP:"
+    lcd.setCursor(12,0);                  // nastav kurzor na LCD na 12,0
+    lcd.print("T:");                      // zobraz na LCD "T:"
     lcd.setCursor(14,0);                  // nastav kurzor na LCD na 14,0
     lcd.print(temp_Average,1);            // zobraz na LCD proměnnou temp_Average, jedno desetinné místo
     lcd.setCursor(18,0);                  // nastav kurzor na 18,0
     lcd.print(char(223));                 // zobraz na LCD znak "°"
     lcd.setCursor(19,0);                  // nastav kurzor na 19,0
     lcd.print("C");                       // zobraz na LCD "C"
+
+
+    lcd.setCursor(0,2);                   // nastav kurzor na LCD na 0,2
+    lcd.print("OKNO:");                   // zobraz na LCD "OKNO:"
+    lcd.setCursor(5,2);                   // nastav kurzor na LCD na 5,2
+    if (windowClosed)                     // KDYŽ windowClosed je TRUE
+    {
+    lcd.print("ZAVR");                    // zobraz na LCD "ZAVR"
+    }
+    else                                  // JINAK
+    {
+    lcd.print("OTEV");                    // zobraz na LCD "OTEC"
+    }
+
+    if (modeMinimal)                      // KDYŽ modeMinimal
+    {
+    lcd.setCursor(13,2);                  // nastav kurzor na LCD na 13,2
+    lcd.print("NEBYDLI");                 // zobraz na LCD "NEBYDLI"
+    }
+    else                                  // JINAK
+    {
+    lcd.setCursor(15,2);                  // nastav kurzor na LCD na 14,2
+    lcd.print("BYDLI");                   // zobraz na LCD "BYDLI"
+    }
 
 
 /*--------------------------------------------------------------------------------------------------
@@ -259,15 +307,13 @@ void loop () {
 
 /*------------------------------------------------------------------------------------------------*/
 
-    Serial.print("TEMP_MAN: ");           // vypiš na sériovou linku "TEMP_MAN: "
+    Serial.print("T_MANUAL: ");           // vypiš na sériovou linku "T_MANUAL: "
     Serial.print(temp_Manual);            // vypiš na sériovou linku proměnnou temp_Manual
     Serial.print("°C");                   // vypiš na sériovou linku "°C"
 
 /*------------------------------------------------------------------------------------------------*/
 
-  // KDYŽ temp_Sensor je v provozním rozsahu
-  if (temp_Sensor > TEMP_OPERATIONAL_RANGE_LOW && temp_Sensor < TEMP_OPERATIONAL_RANGE_HIGH)               
-  {
+  
     Serial.print(" temp_Sensor: ");
     Serial.print(temp_Sensor);
     Serial.print("°C");
@@ -278,22 +324,31 @@ void loop () {
 
     Serial.print(" temp_average: ");
     Serial.print(temp_Average);
-    Serial.println("°C");
-  } 
-  else
+    Serial.print("°C");
+
+  // KDYŽ temp_Sensor je mimo provozní rozsah
+  if (temp_Sensor < TEMP_OPERATIONAL_RANGE_LOW || temp_Sensor > TEMP_OPERATIONAL_RANGE_HIGH) {
+    Serial.print(" TEMPERATURE OUT OF RANGE - ERROR ");
+  }
+
+/*------------------------------------------------------------------------------------------------*/
+
+  if (windowClosed) 
   {
-    Serial.print(" temp_Sensor: ");
-    Serial.print(temp_Sensor);
-    
-    Serial.print(" temp_Corrected: ");
-    Serial.print(temp_Corrected);
-    Serial.print("°C");
+    Serial.print(" OKNO:ZAVRENO ");
+  }
+  else 
+  {
+    Serial.print(" OKNO:OTEVRENO");
+  }
 
-    Serial.print(" temp_average: ");
-    Serial.print(temp_Average);
-    Serial.print("°C");
-
-    Serial.println(" TEMPERATURE OUT OF RANGE - ERROR");
+  if (modeMinimal) 
+  {
+    Serial.print(" MOD:NEBYDLI");
+  }
+  else 
+  {
+    Serial.print(" MOD:BYDLI  ");
   }
 
 
@@ -301,7 +356,8 @@ void loop () {
 ----------------------------------------------------------------------------------------------------
 --------------------------------------------------------------------------------------------------*/
 
-    delay(1000);                          // počkej 1 sekundu
+    Serial.println();                     // nový řádek
+    delay(240);                          // počkej 1 sekundu
 
 }
 
