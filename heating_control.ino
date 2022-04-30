@@ -57,6 +57,10 @@ bool windowClosed;                        // proměnná - okno zavřené
 bool modeMinimal;                         // proměnná - minimální teplotní mód
 
 
+unsigned long previousMillis = 0;         // předchozí čas uplynutí intervalu
+const long interval = 5000;               // interval
+
+
 void setup () {
   Serial.begin(9600);
 
@@ -102,7 +106,7 @@ void loop () {
 
 
     int analogValue = analogRead(PIN_POTENTIOMETER);                                                  // čtení vstupu na analogovém pinu PIN_POTENTIOMETER
-    float temp_Manual = floatMap(analogValue, 0, 1023, TEMP_MAN_RANGE_MAX, TEMP_MAN_RANGE_MIN);       // temp_Manual - použití funkce floatMap (přeškálovat na teplotu temp_Manual (rozsah od do))
+    temp_Manual = floatMap(analogValue, 0, 1023, TEMP_MAN_RANGE_MAX, TEMP_MAN_RANGE_MIN);             // temp_Manual - použití funkce floatMap (přeškálovat na teplotu temp_Manual (rozsah od do))
 
 
 /*--------------------------------------------------------------------------------------------------
@@ -110,16 +114,34 @@ void loop () {
 --------------------------------------------------------------------------------------------------*/
 
 
-    sensors.requestTemperatures();                       // příkaz k získání teploty
-    float temp_Sensor = sensors.getTempCByIndex(0);      // čtení teploty ve stupních C
-
-
+    if (temp_Sensor == NULL)                              // KDYŽ teplota nebyla ještě načtena
+  {
+    sensors.requestTemperatures();                        // příkaz k získání teploty
+    temp_Sensor = sensors.getTempCByIndex(0);             // čtení teploty ve stupních C
+    
     // KALIBRACE temp_Sensor --> temp_Corrected
     float temp_RawRange = temp_RawHigh - temp_RawLow;
     float temp_ReferenceRange = temp_ReferenceHigh - temp_ReferenceLow;
-    float temp_Corrected = (((temp_Sensor - temp_RawLow) * temp_ReferenceRange) / temp_RawRange) + temp_ReferenceLow;
+    temp_Corrected = (((temp_Sensor - temp_RawLow) * temp_ReferenceRange) / temp_RawRange) + temp_ReferenceLow;
 
-    temp_Average = movingAverage(temp_Corrected);
+    temp_Average = movingAverage(temp_Corrected);         // klouzavý průměr
+  }
+  
+  unsigned long currentMillis = millis();
+
+    if (currentMillis - previousMillis >= interval) {     // MĚŘENÍ INTERVALU od posledního splnění podmínky
+    previousMillis = currentMillis;                       // uloží čas současného provedení IF do příští smyčky
+    
+    sensors.requestTemperatures();                        // příkaz k získání teploty
+    temp_Sensor = sensors.getTempCByIndex(0);             // čtení teploty ve stupních C
+    
+    // KALIBRACE temp_Sensor --> temp_Corrected
+    float temp_RawRange = temp_RawHigh - temp_RawLow;
+    float temp_ReferenceRange = temp_ReferenceHigh - temp_ReferenceLow;
+    temp_Corrected = (((temp_Sensor - temp_RawLow) * temp_ReferenceRange) / temp_RawRange) + temp_ReferenceLow;
+
+    temp_Average = movingAverage(temp_Corrected);         // klouzavý průměr
+  }
 
 /*------------------------------------------------------------------------------------------------*/
 
@@ -357,7 +379,7 @@ void loop () {
 --------------------------------------------------------------------------------------------------*/
 
     Serial.println();                     // nový řádek
-    delay(240);                          // počkej 1 sekundu
+    delay(250);                           // počkej 0,25 sekund
 
 }
 
