@@ -5,16 +5,19 @@
 #include <DallasTemperature.h>    // DS18B20 knihovna
 
 
-#define DAY_BEGINS          6      // DEFINOVAT !!! hodinu kdy začíná den
-#define DAY_ENDS            22     // DEFINOVAT !!! hodinu kdy již není den
-#define TEMP_MAN_RANGE_MAX  26     // DEFINOVAT !!! maximální teplotu rozsahu TEMP_MAN
-#define TEMP_MAN_RANGE_MIN  16     // DEFINOVAT !!! minimální teplotu rozsahu TEMP_MAN
-
-#define TEMP_SENSOR_PIN              2    // Arduino pin připojený k DQ pinu senzoru DS18B20
-#define TEMP_OPERATIONAL_RANGE_LOW   0    // spodní hranice provozního rozsahu teploty
-#define TEMP_OPERATIONAL_RANGE_HIGH  50   // horní hranice provozního rozsahu teploty
+#define DAY_BEGINS                   6    // DEFINOVAT !!! hodinu kdy začíná den
+#define DAY_ENDS                     22   // DEFINOVAT !!! hodinu kdy již není den
 
 #define PIN_POTENTIOMETER            A0   // pin ke střednímu vývodu potenciometru
+#define TEMP_MAN_RANGE_MAX           26   // DEFINOVAT !!! maximální teplotu rozsahu TEMP_MAN
+#define TEMP_MAN_RANGE_MIN           16   // DEFINOVAT !!! minimální teplotu rozsahu TEMP_MAN
+
+#define TEMP_SENSOR_PIN              2    // pin připojený k DQ pinu senzoru DS18B20
+#define TEMP_OPERATIONAL_RANGE_LOW   0    // spodní hranice provozního rozsahu teploty
+#define TEMP_OPERATIONAL_RANGE_HIGH  50   // horní hranice provozního rozsahu teploty
+#define MOVING_AVG_WIN_SIZE          10   // počet průměrovaných hodnot klouzavého průměru
+
+
 
 
 RTC_DS3231 rtc;                           // vytvoření objektu rtc
@@ -41,6 +44,8 @@ float temp_ReferenceHigh = 100;           // referenční teplota bodu varu !!! 
 float temp_ReferenceLow = 0;              // referenční teplota trojného bodu (přesná teplota 0,01 °C)
 
 float temp_Corrected;                     // teplota kalibrovaného senzoru ve stupních C
+
+float temp_Average;                       // klouzavý průměr temp_Corrected
 
 
 bool isDay;
@@ -70,13 +75,13 @@ void loop () {
     
     DateTime now = rtc.now();
     
-    if (now.hour(), DEC >= DAY_BEGINS && now.hour(), DEC < DAY_ENDS)      // KDYŽ HODINA je většíneborovna než DAY_BEGINS nebo menší než DAY_ENDS
+    if (now.hour(), DEC >= DAY_BEGINS && now.hour(), DEC < DAY_ENDS)      // KDYŽ HODINA je většíneborovna než DAY_BEGINS a zároveň menší než DAY_ENDS
   {
-    bool isDay = true;                    // je den -> isDay = true
+    isDay = true;                         // je den -> isDay = true
   }                                       //
     else                                  // JINAK
   {                                       //
-    bool isDay = false;                   // je noc -> isDay = false
+    isDay = false;                        // je noc -> isDay = false
   }
 
 /*------------------------------------------------------------------------------------------------*/
@@ -99,6 +104,8 @@ void loop () {
   float temp_RawRange = temp_RawHigh - temp_RawLow;
   float temp_ReferenceRange = temp_ReferenceHigh - temp_ReferenceLow;
   float temp_Corrected = (((temp_Sensor - temp_RawLow) * temp_ReferenceRange) / temp_RawRange) + temp_ReferenceLow;
+
+  temp_Average = movingAverage(temp_Corrected);
 
 
 /*--------------------------------------------------------------------------------------------------
@@ -176,7 +183,7 @@ void loop () {
     lcd.setCursor(9,0);                   // nastav kurzor na LCD na 9,0
     lcd.print("TEMP:");                   // zobraz na LCD "TEMP:"
     lcd.setCursor(14,0);                  // nastav kurzor na LCD na 14,0
-    lcd.print(temp_Corrected,1);          // zobraz na LCD proměnnou temp_Corrected, jedno desetinné místo
+    lcd.print(temp_Average,1);            // zobraz na LCD proměnnou temp_Average, jedno desetinné místo
     lcd.setCursor(18,0);                  // nastav kurzor na 18,0
     lcd.print(char(223));                 // zobraz na LCD znak "°"
     lcd.setCursor(19,0);                  // nastav kurzor na 19,0
@@ -267,6 +274,10 @@ void loop () {
     
     Serial.print(" temp_Corrected: ");
     Serial.print(temp_Corrected);
+    Serial.print("°C");
+
+    Serial.print(" temp_average: ");
+    Serial.print(temp_Average);
     Serial.println("°C");
   } 
   else
@@ -276,6 +287,10 @@ void loop () {
     
     Serial.print(" temp_Corrected: ");
     Serial.print(temp_Corrected);
+    Serial.print("°C");
+
+    Serial.print(" temp_average: ");
+    Serial.print(temp_Average);
     Serial.print("°C");
 
     Serial.println(" TEMPERATURE OUT OF RANGE - ERROR");
@@ -288,4 +303,32 @@ void loop () {
 
     delay(1000);                          // počkej 1 sekundu
 
+}
+
+
+// FUNKCE PRO KLOUZAVÝ PRŮMĚR
+
+float movingAverage(float value) {
+  const byte nvalues = MOVING_AVG_WIN_SIZE;     // Moving average window size
+
+  static byte current = 0;                      // Index for current value
+  static byte cvalues = 0;                      // Count of values read (<= nvalues)
+  static float sum = 0;                         // Rolling sum
+  static float values[nvalues];
+
+  sum += value;
+
+  // If the window is full, adjust the sum by deleting the oldest value
+  if (cvalues == nvalues)
+    sum -= values[current];
+
+  values[current] = value;          // Replace the oldest with the latest
+
+  if (++current >= nvalues)
+    current = 0;
+
+  if (cvalues < nvalues)
+    cvalues += 1;
+
+  return sum/cvalues;
 }
