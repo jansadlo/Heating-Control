@@ -20,6 +20,9 @@
 #define PIN_WINDOW                   3    // pin od relé okna
 #define PIN_MODE_SWITCH              4    // pin přepínače módu
 
+#define REFRESH_DISPLAY_INTERVAL     1800000    // interval refreshe displeje (v milisekundách)
+#define MEASURE_TEMP_INTERVAL        30000      // interval měření teploty (v milisekundách)
+
 
 
 
@@ -57,8 +60,12 @@ bool windowClosed;                        // proměnná - okno zavřené
 bool modeMinimal;                         // proměnná - minimální teplotní mód
 
 
-unsigned long previousMillis = 0;         // předchozí čas uplynutí intervalu
-const long interval = 5000;               // interval
+unsigned long previousTempMillis = 0;               // předchozí čas uplynutí intervalu měření teploty
+const long intervalTemp = MEASURE_TEMP_INTERVAL;    // interval měření teploty
+
+unsigned long previousDisplayRefreshMillis = 0;                   // předchozí čas uplynutí intervalu refreshe displeje
+const long intervalDisplayRefresh = REFRESH_DISPLAY_INTERVAL;     // interval refreshe displeje
+
 
 
 void setup () {
@@ -85,7 +92,9 @@ void setup () {
 
 
   lcd.init();                             // inicializace LCD
-  lcd.backlight();                        // zapnutí podsvícení (vypnutí podsvícení by bylo "lcd.noBacklight();)
+  lcd.display();                          // zapnutí displeje (vypnutí by bylo "lcd.noDisplay();")
+  lcd.backlight();                        // zapnutí podsvícení (vypnutí by bylo "lcd.noBacklight();")
+  lcd.clear();                            // refresh displeje
 
   }
 
@@ -116,7 +125,10 @@ void loop () {
 
     if (temp_Sensor == NULL)                              // KDYŽ teplota nebyla ještě načtena
   {
+    Serial.print("MEASURE TEMP CYCLE;");
+    Serial.print(" REQUESTING TEMP...");
     sensors.requestTemperatures();                        // příkaz k získání teploty
+    Serial.println(" DONE");
     temp_Sensor = sensors.getTempCByIndex(0);             // čtení teploty ve stupních C
     
     // KALIBRACE temp_Sensor --> temp_Corrected
@@ -127,13 +139,17 @@ void loop () {
     temp_Average = movingAverage(temp_Corrected);         // klouzavý průměr
   }
   
-  unsigned long currentMillis = millis();
+  unsigned long currentTempMillis = millis();                         // načtení současného času běhu smyčky
+    if (currentTempMillis - previousTempMillis >= intervalTemp)       // MĚŘENÍ INTERVALU od posledního splnění podmínky
+   {
+    previousTempMillis = currentTempMillis;                           // uloží čas současného provedení IF do příští smyčky
 
-    if (currentMillis - previousMillis >= interval) {     // MĚŘENÍ INTERVALU od posledního splnění podmínky
-    previousMillis = currentMillis;                       // uloží čas současného provedení IF do příští smyčky
-    
+    Serial.print("MEASURE TEMP CYCLE;");
+    Serial.print(" REQUESTING TEMP...");
     sensors.requestTemperatures();                        // příkaz k získání teploty
+    Serial.println(" DONE");
     temp_Sensor = sensors.getTempCByIndex(0);             // čtení teploty ve stupních C
+
     
     // KALIBRACE temp_Sensor --> temp_Corrected
     float temp_RawRange = temp_RawHigh - temp_RawLow;
@@ -157,11 +173,16 @@ void loop () {
 /*--------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 --------------------------------------------------------------------------------------------------*/
-
-
-    lcd.clear();
-
   
+  unsigned long currentDisplayRefreshMillis = millis();                                         // načtení současného času běhu smyčky
+    if (currentDisplayRefreshMillis - previousDisplayRefreshMillis >= intervalDisplayRefresh)   // MĚŘENÍ INTERVALU od posledního splnění podmínky
+  {                                                                                             
+    previousDisplayRefreshMillis = currentDisplayRefreshMillis;         // uloží čas současného provedení IF do příští smyčky
+    lcd.clear();                                                        // REFRESH obrazovky
+  }
+
+
+
     if (now.hour() < 10)                  // KDYŽ HODINA < 10
   {                                       //
     lcd.setCursor(0,0);                   // nastav kurzor na LCD na 0,0
@@ -248,15 +269,14 @@ void loop () {
     lcd.print("OTEV");                    // zobraz na LCD "OTEC"
     }
 
+    lcd.setCursor(13,2);                  // nastav kurzor na LCD na 13,2
     if (modeMinimal)                      // KDYŽ modeMinimal
     {
-    lcd.setCursor(13,2);                  // nastav kurzor na LCD na 13,2
     lcd.print("NEBYDLI");                 // zobraz na LCD "NEBYDLI"
     }
     else                                  // JINAK
     {
-    lcd.setCursor(15,2);                  // nastav kurzor na LCD na 14,2
-    lcd.print("BYDLI");                   // zobraz na LCD "BYDLI"
+    lcd.print("  BYDLI");                 // zobraz na LCD "  BYDLI"
     }
 
 
@@ -379,7 +399,7 @@ void loop () {
 --------------------------------------------------------------------------------------------------*/
 
     Serial.println();                     // nový řádek
-    delay(250);                           // počkej 0,25 sekund
+    delay(100);                           // počkej 0,1 sekund
 
 }
 
