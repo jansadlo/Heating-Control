@@ -29,7 +29,6 @@
 #define TEMP_HYSTERESIS              1          // hodnota hystereze směrem dolů (temp_Target -x°C)
 
 #define BUTTON_PIN                   6
-#define LED_PIN                      13
 #define DISPLAY_INTERVAL             10000
 
 
