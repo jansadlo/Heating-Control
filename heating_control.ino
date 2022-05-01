@@ -23,6 +23,9 @@
 #define REFRESH_DISPLAY_INTERVAL     1800000    // interval refreshe displeje (v milisekundách)
 #define MEASURE_TEMP_INTERVAL        30000      // interval měření teploty (v milisekundách)
 
+#define TEMP_MINIMAL                 15         // teplota když apartmán není obydlen (minimální mód)
+#define TEMP_NIGHT_DECREASE          1.5        // snížení teploty v době noci o x stupňů C
+
 
 
 
@@ -58,6 +61,12 @@ bool isDay;                               // proměnná - je den
 
 bool windowClosed;                        // proměnná - okno zavřené
 bool modeMinimal;                         // proměnná - minimální teplotní mód
+
+float temp_Target;                                // cílová teplota
+float temp_Minimal = TEMP_MINIMAL;                // minimální teplota (nikdo nebydlí)
+float temp_Night_Decrease = TEMP_NIGHT_DECREASE;  // snížení teploty v době noci
+
+bool heatOn;                                      // zapnout topení
 
 
 unsigned long previousTempMillis = 0;               // předchozí čas uplynutí intervalu měření teploty
@@ -169,7 +178,17 @@ void loop () {
                                               // obvod rozpojen modeManual = TRUE
                                               // obvod uzavřen modeManual = FALSE
 
-    
+/*------------------------------------------------------------------------------------------------*/
+
+    if (modeMinimal) temp_Target = temp_Minimal;
+    else temp_Target = temp_Manual;
+
+/*------------------------------------------------------------------------------------------------*/
+
+
+
+
+
 /*--------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 --------------------------------------------------------------------------------------------------*/
@@ -186,41 +205,33 @@ void loop () {
     if (now.hour() < 10)                  // KDYŽ HODINA < 10
   {                                       //
     lcd.print("0");                       // zobraz na LCD "0"
-    lcd.setCursor(1,0);                   // nastav kurzor na LCD na 1,0
     lcd.print(now.hour(), DEC);           // zobraz na LCD hodinu
   }                                       //
-  else                                    // JINAK
+    else                                  // JINAK
   {                                       //
     lcd.print(now.hour(), DEC);           // zobraz na LCD hodinu
   }
-    lcd.setCursor(2,0);                   // DVOJTEČKA
-    lcd.print(':');                       //
-
-    lcd.setCursor(3,0);                   // nastav kurzor na na LCD na 3,0
+    lcd.print(':');
     if (now.minute() < 10)                // KDYŽ MINUTA < 10
   {                                       //
     lcd.print("0");                       // zobraz na LCD "0"
-    lcd.setCursor(4,0);                   // nastav kurzor na LCD na 4,0
     lcd.print(now.minute(), DEC);         // zobraz na LCD minutu
   }                                       //
     else                                  // JINAK
   {                                       //
     lcd.print(now.minute(), DEC);         // zobraz na LCD minutu
   }
-    lcd.setCursor(5,0);                   // DVOJTEČKA
     lcd.print(':');                       //
-
-    lcd.setCursor(6,0);                   // nastav kurzor na LCD na 6,0
     if (now.second() < 10)                // KDYŽ SEKUNDA < 10
   {                                       //
     lcd.print("0");                       // zobraz na LCD "0"
-    lcd.setCursor(7,0);                   // nastav kurzor na LCD na 7,0
     lcd.print(now.second(), DEC);         // zobraz na LCD sekundu
   }                                       //
     else                                  // JINAK
   {                                       //
     lcd.print(now.second(), DEC);         // zobraz na LCD sekundu
   }
+
     
     lcd.setCursor(12,0);                  // nastav kurzor na LCD na 12,0
     lcd.print("T:");                      // zobraz na LCD "T:"
@@ -239,6 +250,7 @@ void loop () {
     lcd.print("NOC");                     // zobrazí na LCD "NOC"
   }
 
+
     lcd.setCursor(5,1);                   // nastav kurzor na LCD na 5,1
     lcd.print("T_MANUAL:");               // zobraz na LCD "T_MANUAL:"
     lcd.print(temp_Manual,1);             // zobraz na LCD proměnnou temp_Manual, jedno desetinné místo
@@ -247,15 +259,13 @@ void loop () {
 
 
     lcd.setCursor(0,2);                   // nastav kurzor na LCD na 0,2
-    lcd.print("OKNO:");                   // zobraz na LCD "OKNO:"
-
     if (windowClosed)                     // KDYŽ windowClosed je TRUE
     {
-    lcd.print("ZAVR");                    // zobraz na LCD "ZAVR"
+    lcd.print("OKNO:ZAVR");               // zobraz na LCD "OKNO:ZAVR"
     }
     else                                  // JINAK
     {
-    lcd.print("OTEV");                    // zobraz na LCD "OTEC"
+    lcd.print("OKNO:OTEV");               // zobraz na LCD "OKNO:OTEV"
     }
 
     lcd.setCursor(13,2);                  // nastav kurzor na LCD na 13,2
@@ -267,6 +277,12 @@ void loop () {
     {
     lcd.print("  BYDLI");                 // zobraz na LCD "  BYDLI"
     }
+
+    lcd.setCursor(0,3);                   // nastav kurzor na LCD na 0,3
+    lcd.print("CIL:");                    // zobraz na LCD "CIL:"
+    lcd.print(temp_Target,1);             // zobraz na LCD proměnnou temp_Manual, jedno desetinné místo
+    lcd.print(char(223));                 // zobraz na LCD znak "°"
+    lcd.print("C");                       // zobraz na LCD "C"
 
 
 /*--------------------------------------------------------------------------------------------------
@@ -345,22 +361,17 @@ void loop () {
 /*------------------------------------------------------------------------------------------------*/
 
   
-    Serial.print(" temp_Sensor: ");
+    Serial.print(" T_SENSOR: ");
     Serial.print(temp_Sensor);
     Serial.print("°C");
     
-    Serial.print(" temp_Corrected: ");
+    Serial.print(" T_CORRECTED: ");
     Serial.print(temp_Corrected);
     Serial.print("°C");
 
-    Serial.print(" temp_average: ");
+    Serial.print(" T_AVERAGE: ");
     Serial.print(temp_Average);
     Serial.print("°C");
-
-  // KDYŽ temp_Sensor je mimo provozní rozsah
-  if (temp_Sensor < TEMP_OPERATIONAL_RANGE_LOW || temp_Sensor > TEMP_OPERATIONAL_RANGE_HIGH) {
-    Serial.print(" TEMPERATURE OUT OF RANGE - ERROR ");
-  }
 
 /*------------------------------------------------------------------------------------------------*/
 
@@ -382,6 +393,19 @@ void loop () {
     Serial.print(" MOD:BYDLI  ");
   }
 
+/*------------------------------------------------------------------------------------------------*/
+
+    Serial.print(" T_TARGET: ");
+    Serial.print(temp_Target);
+    Serial.print("°C");
+
+/*------------------------------------------------------------------------------------------------*/
+
+      // KDYŽ temp_Sensor je mimo provozní rozsah
+  if (temp_Sensor < TEMP_OPERATIONAL_RANGE_LOW || temp_Sensor > TEMP_OPERATIONAL_RANGE_HIGH) {
+    Serial.println();
+    Serial.print(" TEMPERATURE OUT OF RANGE - ERROR ");
+  }
 
 /*--------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
