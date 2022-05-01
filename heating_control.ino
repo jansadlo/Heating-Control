@@ -19,12 +19,14 @@
 
 #define PIN_WINDOW                   3    // pin od relé okna
 #define PIN_MODE_SWITCH              4    // pin přepínače módu
+#define RELAY_PIN                    5    // pin připojený k ovládání relé
 
 #define REFRESH_DISPLAY_INTERVAL     1800000    // interval refreshe displeje (v milisekundách)
 #define MEASURE_TEMP_INTERVAL        30000      // interval měření teploty (v milisekundách)
 
 #define TEMP_MINIMAL                 15         // teplota když apartmán není obydlen (minimální mód)
-#define TEMP_NIGHT_DECREASE          1.5        // snížení teploty v době noci o x stupňů C
+#define TEMP_NIGHT_DECREASE          1          // snížení teploty v době noci o x stupňů C
+#define TEMP_HYSTERESIS              1          // hodnota hystereze směrem dolů (temp_Target -x°C)
 
 
 
@@ -65,6 +67,10 @@ bool modeMinimal;                         // proměnná - minimální teplotní 
 float temp_Target;                                // cílová teplota
 float temp_Minimal = TEMP_MINIMAL;                // minimální teplota (nikdo nebydlí)
 float temp_Night_Decrease = TEMP_NIGHT_DECREASE;  // snížení teploty v době noci
+float temp_Hysteresis = TEMP_HYSTERESIS;          // hodnota hystereze (temp_Target -x°C)
+float temp_Upper_Threshold;                       // horní mez temp_Target
+float temp_Lower_Threshold;                       // spodní mez temp_Target
+
 
 bool heatOn;                                      // zapnout topení
 
@@ -97,8 +103,8 @@ void setup () {
 
   pinMode(PIN_WINDOW, INPUT_PULLUP);         // konfigurovat PIN_WINDOW jako vstup, nastavit interní pullup
   pinMode(PIN_MODE_SWITCH, INPUT_PULLUP);    // konfigurovat PIN_MODE_SWITCH jako vstup, nastavit interní pullup
-  pinMode(13, OUTPUT);                       // pin s interní LED konfigurovat jako výstup
-
+  pinMode(RELAY_PIN, OUTPUT);                // konfigurovat RELAY_PIN jako výstup
+  
 
   lcd.init();                             // inicializace LCD
   lcd.display();                          // zapnutí displeje (vypnutí by bylo "lcd.noDisplay();")
@@ -180,14 +186,34 @@ void loop () {
 
 /*------------------------------------------------------------------------------------------------*/
 
-    if (modeMinimal) temp_Target = temp_Minimal;
-    else temp_Target = temp_Manual;
+    if (modeMinimal) temp_Target = temp_Minimal;      // KDYŽ v apartmánu nikdo nebydlí, cílová teplota je Minimal
+    else temp_Target = temp_Manual;                   // JINAK je teplota v manuálním režimu
 
 /*------------------------------------------------------------------------------------------------*/
 
+    if (!isDay) temp_Target = temp_Target - temp_Night_Decrease;      // v noci sniž temp_Target o stanovenou mez
+
+    temp_Upper_Threshold = temp_Target;                               // horní hranice vytápěné teploty
+    temp_Lower_Threshold = temp_Target - temp_Hysteresis;             // spodní hranice vytápěné teploty
 
 
+    if (temp_Average > temp_Upper_Threshold && windowClosed)
+   {
+    heatOn = false;                                                   // proměnná heatOn je nepravda
+    digitalWrite(RELAY_PIN, LOW);                                     // VYPNOUT RELÉ
+   } 
+    if (temp_Average < temp_Lower_Threshold && windowClosed)
+   {
+    heatOn = true;                                                    // proměnná heatOn je pravda
+    digitalWrite(RELAY_PIN, HIGH);                                    // ZAPNOUT RELÉ
+   }
 
+
+    if (!windowClosed)                                                // KDYŽ je otevřené okno
+   {
+    heatOn = false;
+    digitalWrite(RELAY_PIN, LOW);                                     // VYPNI RELÉ
+   }
 
 /*--------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
@@ -283,6 +309,16 @@ void loop () {
     lcd.print(temp_Target,1);             // zobraz na LCD proměnnou temp_Manual, jedno desetinné místo
     lcd.print(char(223));                 // zobraz na LCD znak "°"
     lcd.print("C");                       // zobraz na LCD "C"
+
+    lcd.setCursor(13,3);                  // nastav kurzor na LCD na 13,3
+    if (heatOn)                           // KDYŽ heatOn
+    {
+    lcd.print("  TOPIM");                 // zobraz na LCD "  TOPIM"
+    }
+    else                                  // JINAK
+    {
+    lcd.print("NETOPIM");                 // zobraz na LCD "NETOPIM"
+    }
 
 
 /*--------------------------------------------------------------------------------------------------
@@ -398,6 +434,17 @@ void loop () {
     Serial.print(" T_TARGET: ");
     Serial.print(temp_Target);
     Serial.print("°C");
+
+/*------------------------------------------------------------------------------------------------*/
+
+    if (heatOn)                           // KDYŽ heatOn = true
+  {
+    Serial.print(" TOPIM");               // vypiš na sériovou linku " TOPIM"
+  }                                       //
+    else                                  // JINAK
+  {                                       //
+    Serial.print(" NETOPIM");             // vypiš na sériovou linku " NETOPIM"
+  }
 
 /*------------------------------------------------------------------------------------------------*/
 
