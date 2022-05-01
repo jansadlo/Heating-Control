@@ -28,7 +28,9 @@
 #define TEMP_NIGHT_DECREASE          1          // snížení teploty v době noci o x stupňů C
 #define TEMP_HYSTERESIS              1          // hodnota hystereze směrem dolů (temp_Target -x°C)
 
-
+#define BUTTON_PIN                   6
+#define LED_PIN                      13
+#define DISPLAY_INTERVAL             10000
 
 
 RTC_DS3231 rtc;                           // vytvoření objektu rtc
@@ -82,6 +84,10 @@ unsigned long previousDisplayRefreshMillis = 0;                   // předchozí
 const long intervalDisplayRefresh = REFRESH_DISPLAY_INTERVAL;     // interval refreshe displeje
 
 
+bool buttonOff = false;                   // tlačítko není stisknuté
+bool backlightState = true;               // podsvícení zapnuto
+unsigned long backlightStartTime = 0;     // časovač podsvícení nastaven
+
 
 void setup () {
   Serial.begin(9600);
@@ -104,7 +110,8 @@ void setup () {
   pinMode(PIN_WINDOW, INPUT_PULLUP);         // konfigurovat PIN_WINDOW jako vstup, nastavit interní pullup
   pinMode(PIN_MODE_SWITCH, INPUT_PULLUP);    // konfigurovat PIN_MODE_SWITCH jako vstup, nastavit interní pullup
   pinMode(RELAY_PIN, OUTPUT);                // konfigurovat RELAY_PIN jako výstup
-  
+
+  pinMode(BUTTON_PIN, INPUT_PULLUP);         // konfigurovat BUTTON_PIN jako vstup, nastavit interní pullup
 
   lcd.init();                             // inicializace LCD
   lcd.display();                          // zapnutí displeje (vypnutí by bylo "lcd.noDisplay();")
@@ -218,6 +225,25 @@ void loop () {
 /*--------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 --------------------------------------------------------------------------------------------------*/
+
+    buttonOff = digitalRead(BUTTON_PIN);    // čtení stavu tlačítka
+
+    if (!buttonOff)                         // KDYŽ je tlačítko stisknuté (pullup otáčí hodnotu)
+  {
+    backlightState = true;
+    lcd.display();
+    lcd.backlight();
+    backlightStartTime = millis();
+  }
+
+    if (backlightState == true && millis() - backlightStartTime >= DISPLAY_INTERVAL)
+  {
+    backlightState = false;
+    lcd.noBacklight();
+    lcd.noDisplay();
+  }
+
+/*------------------------------------------------------------------------------------------------*/
   
   unsigned long currentDisplayRefreshMillis = millis();                                         // načtení současného času běhu smyčky
     if (currentDisplayRefreshMillis - previousDisplayRefreshMillis >= intervalDisplayRefresh)   // MĚŘENÍ INTERVALU od posledního splnění podmínky
