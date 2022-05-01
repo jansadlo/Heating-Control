@@ -9,7 +9,7 @@
 #define DAY_ENDS                     22   // DEFINOVAT !!! hodinu kdy již není den
 
 #define PIN_POTENTIOMETER            A0   // pin ke střednímu vývodu potenciometru
-#define TEMP_MAN_RANGE_MAX           26   // DEFINOVAT !!! maximální teplotu rozsahu TEMP_MAN
+#define TEMP_MAN_RANGE_MAX           24   // DEFINOVAT !!! maximální teplotu rozsahu TEMP_MAN
 #define TEMP_MAN_RANGE_MIN           16   // DEFINOVAT !!! minimální teplotu rozsahu TEMP_MAN
 
 #define TEMP_SENSOR_PIN              2    // pin připojený k DQ pinu senzoru DS18B20
@@ -125,10 +125,10 @@ void loop () {
 
     if (temp_Sensor == NULL)                              // KDYŽ teplota nebyla ještě načtena
   {
-    Serial.print("MEASURE TEMP CYCLE;");
+    Serial.print("temp_Sensor == NULL; MEASURE TEMP CYCLE;");
     Serial.print(" REQUESTING TEMP...");
     sensors.requestTemperatures();                        // příkaz k získání teploty
-    Serial.println(" DONE");
+    Serial.println(" DONE;");
     temp_Sensor = sensors.getTempCByIndex(0);             // čtení teploty ve stupních C
     
     // KALIBRACE temp_Sensor --> temp_Corrected
@@ -147,7 +147,7 @@ void loop () {
     Serial.print("MEASURE TEMP CYCLE;");
     Serial.print(" REQUESTING TEMP...");
     sensors.requestTemperatures();                        // příkaz k získání teploty
-    Serial.println(" DONE");
+    Serial.println(" DONE;");
     temp_Sensor = sensors.getTempCByIndex(0);             // čtení teploty ve stupních C
 
     
@@ -182,84 +182,73 @@ void loop () {
   }
 
 
-
+    lcd.setCursor(0,0);                   // nastav kurzor na LCD na 0,0
     if (now.hour() < 10)                  // KDYŽ HODINA < 10
   {                                       //
-    lcd.setCursor(0,0);                   // nastav kurzor na LCD na 0,0
     lcd.print("0");                       // zobraz na LCD "0"
     lcd.setCursor(1,0);                   // nastav kurzor na LCD na 1,0
     lcd.print(now.hour(), DEC);           // zobraz na LCD hodinu
   }                                       //
   else                                    // JINAK
   {                                       //
-    lcd.setCursor(0,0);                   // nastav kurzor na LCD na 0,0
     lcd.print(now.hour(), DEC);           // zobraz na LCD hodinu
   }
     lcd.setCursor(2,0);                   // DVOJTEČKA
     lcd.print(':');                       //
 
+    lcd.setCursor(3,0);                   // nastav kurzor na na LCD na 3,0
     if (now.minute() < 10)                // KDYŽ MINUTA < 10
   {                                       //
-    lcd.setCursor(3,0);                   // nastav kurzor na na LCD na 3,0
     lcd.print("0");                       // zobraz na LCD "0"
     lcd.setCursor(4,0);                   // nastav kurzor na LCD na 4,0
     lcd.print(now.minute(), DEC);         // zobraz na LCD minutu
   }                                       //
     else                                  // JINAK
   {                                       //
-    lcd.setCursor(3,0);                   // nastav kurzor na LCD na 3,0
     lcd.print(now.minute(), DEC);         // zobraz na LCD minutu
   }
     lcd.setCursor(5,0);                   // DVOJTEČKA
     lcd.print(':');                       //
+
+    lcd.setCursor(6,0);                   // nastav kurzor na LCD na 6,0
     if (now.second() < 10)                // KDYŽ SEKUNDA < 10
   {                                       //
-    lcd.setCursor(6,0);                   // nastav kurzor na LCD na 6,0
     lcd.print("0");                       // zobraz na LCD "0"
     lcd.setCursor(7,0);                   // nastav kurzor na LCD na 7,0
     lcd.print(now.second(), DEC);         // zobraz na LCD sekundu
   }                                       //
     else                                  // JINAK
   {                                       //
-    lcd.setCursor(6,0);                   // nastav kurzor na LCD na 6,0
     lcd.print(now.second(), DEC);         // zobraz na LCD sekundu
   }
     
+    lcd.setCursor(12,0);                  // nastav kurzor na LCD na 12,0
+    lcd.print("T:");                      // zobraz na LCD "T:"
+    lcd.print(temp_Average,1);            // zobraz na LCD proměnnou temp_Average, jedno desetinné místo
+    lcd.print(char(223));                 // zobraz na LCD znak "°"
+    lcd.print("C");                       // zobraz na LCD "C"
+
+
+    lcd.setCursor(0,1);                   // nastav kurzor na LCD na 0,1
     if (isDay)                            // KDYŽ isDay = true
   {
-    lcd.setCursor(0,1);                   // nastav kurzor na LCD na 0,1
     lcd.print("DEN");                     // zobrazí na LCD "DEN"
   }                                       //
     else                                  // JINAK
   {                                       //
-    lcd.setCursor(0,1);                   // nastav kurzor na LCD na 0,1
     lcd.print("NOC");                     // zobrazí na LCD "NOC"
   }
 
-
     lcd.setCursor(5,1);                   // nastav kurzor na LCD na 5,1
-    lcd.print("T_MANUAL:");               // zobraz na LCD "TEMP_MAN:"
-    lcd.setCursor(14,1);                  // nastav kurzor na LCD na 14,1
+    lcd.print("T_MANUAL:");               // zobraz na LCD "T_MANUAL:"
     lcd.print(temp_Manual,1);             // zobraz na LCD proměnnou temp_Manual, jedno desetinné místo
-    lcd.setCursor(18,1);                  // nastav kurzor na 18,1
     lcd.print(char(223));                 // zobraz na LCD znak "°"
-    lcd.setCursor(19,1);                  // nastav kurzor na 19,1
-    lcd.print("C");                       // zobraz na LCD "C"
-
-
-    lcd.setCursor(12,0);                  // nastav kurzor na LCD na 12,0
-    lcd.print("T:");                      // zobraz na LCD "T:"
-    lcd.setCursor(14,0);                  // nastav kurzor na LCD na 14,0
-    lcd.print(temp_Average,1);            // zobraz na LCD proměnnou temp_Average, jedno desetinné místo
-    lcd.setCursor(18,0);                  // nastav kurzor na 18,0
-    lcd.print(char(223));                 // zobraz na LCD znak "°"
-    lcd.setCursor(19,0);                  // nastav kurzor na 19,0
     lcd.print("C");                       // zobraz na LCD "C"
 
 
     lcd.setCursor(0,2);                   // nastav kurzor na LCD na 0,2
     lcd.print("OKNO:");                   // zobraz na LCD "OKNO:"
-    lcd.setCursor(5,2);                   // nastav kurzor na LCD na 5,2
+
     if (windowClosed)                     // KDYŽ windowClosed je TRUE
     {
     lcd.print("ZAVR");                    // zobraz na LCD "ZAVR"
@@ -399,7 +388,6 @@ void loop () {
 --------------------------------------------------------------------------------------------------*/
 
     Serial.println();                     // nový řádek
-    delay(100);                           // počkej 0,1 sekund
 
 }
 
