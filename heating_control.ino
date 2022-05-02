@@ -5,31 +5,30 @@
 #include <DallasTemperature.h>    // DS18B20 knihovna
 
 
-#define DAY_BEGINS                   6    // DEFINOVAT !!! hodinu kdy začíná den
-#define DAY_ENDS                     22   // DEFINOVAT !!! hodinu kdy již není den
+#define DAY_BEGINS                   6    // hodina kdy začíná den
+#define DAY_ENDS                     22   // hodina kdy již není den
 
 #define PIN_POTENTIOMETER            A0   // pin ke střednímu vývodu potenciometru
-#define TEMP_MAN_RANGE_MAX           24   // DEFINOVAT !!! maximální teplotu rozsahu TEMP_MAN
-#define TEMP_MAN_RANGE_MIN           16   // DEFINOVAT !!! minimální teplotu rozsahu TEMP_MAN
-
 #define TEMP_SENSOR_PIN              2    // pin připojený k DQ pinu senzoru DS18B20
+#define PIN_WINDOW                   3    // pin k relé okna
+#define PIN_MODE_SWITCH              4    // pin přepínače módu
+#define PIN_RELAY                    5    // pin připojený k ovládání relé
+#define BUTTON_PIN                   6    // pin tlačítka
+
+#define T_MANUAL_RANGE_MAX           24   // maximální teplota rozsahu T_MANUAL
+#define T_MANUAL_RANGE_MIN           16   // minimální teplota rozsahu T_MANUAL
+
 #define TEMP_OPERATIONAL_RANGE_LOW   0    // spodní hranice provozního rozsahu teploty
 #define TEMP_OPERATIONAL_RANGE_HIGH  50   // horní hranice provozního rozsahu teploty
 #define MOVING_AVG_WIN_SIZE          10   // počet průměrovaných hodnot klouzavého průměru
 
-#define PIN_WINDOW                   3    // pin od relé okna
-#define PIN_MODE_SWITCH              4    // pin přepínače módu
-#define RELAY_PIN                    5    // pin připojený k ovládání relé
+#define REFRESH_DISPLAY_INTERVAL     1800000    // interval refreshe displeje (v ms)
+#define MEASURE_TEMP_INTERVAL        30000      // interval měření teploty (v ms)
+#define DISPLAY_INTERVAL             10000      // interval zapnutí displeje (v ms)
 
-#define REFRESH_DISPLAY_INTERVAL     1800000    // interval refreshe displeje (v milisekundách)
-#define MEASURE_TEMP_INTERVAL        30000      // interval měření teploty (v milisekundách)
-
-#define TEMP_MINIMAL                 15         // teplota když apartmán není obydlen (minimální mód)
-#define TEMP_NIGHT_DECREASE          1          // snížení teploty v době noci o x stupňů C
-#define TEMP_HYSTERESIS              1          // hodnota hystereze směrem dolů (temp_Target -x°C)
-
-#define BUTTON_PIN                   6
-#define DISPLAY_INTERVAL             10000
+#define TEMP_MINIMAL                 15    // teplota když apartmán není obydlen (minimální mód)
+#define TEMP_NIGHT_DECREASE          1     // snížení teploty v době noci o x stupňů C
+#define TEMP_HYSTERESIS              1     // hodnota hystereze směrem dolů (temp_Target -x°C)
 
 
 RTC_DS3231 rtc;                           // vytvoření objektu rtc
@@ -40,30 +39,24 @@ DallasTemperature sensors(&oneWire);      // pass oneWire to DallasTemperature l
 
 char daysOfTheWeek[7][12] = {"Ne","Po","Ut","St","Ct","Pa","So"};
 
-float floatMap(float x, float in_min, float in_max, float out_min, float out_max) {     // Funkce floatMap (pro pozdější mapování
-  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;              // rozsahu odporu potenciometru z analogového
-}                                                                                       // vstupu, na rozsah teplot)
 
-    int analogValue = analogRead(PIN_POTENTIOMETER);                                                  // čtení vstupu na analogovém pinu A0
-    float temp_Manual = floatMap(analogValue, 0, 1023, TEMP_MAN_RANGE_MAX, TEMP_MAN_RANGE_MIN);       // deklarace temp_Manual - použití funkce floatMap (přeškálovat na teplotu temp_Manual (rozsah od do))
-
-
+float temp_Manual;                        // teplota nastavená potenciometrem
 float temp_Sensor;                        // teplota senzoru ve stupních C
+float temp_Corrected;                     // teplota kalibrovaného senzoru ve stupních C
+float temp_Average;                       // klouzavý průměr temp_Corrected
 
 float temp_RawHigh = 100;                 // RAW DATA ze senzoru při varu
 float temp_RawLow = 0;                    // RAD DATA ze senzoru při trojném bodu
 float temp_ReferenceHigh = 100;           // referenční teplota bodu varu !!! při úpravě podle atmosférického tlaku !!!
 float temp_ReferenceLow = 0;              // referenční teplota trojného bodu (přesná teplota 0,01 °C)
 
-float temp_Corrected;                     // teplota kalibrovaného senzoru ve stupních C
-
-float temp_Average;                       // klouzavý průměr temp_Corrected
-
 
 bool isDay;                               // proměnná - je den
-
 bool windowClosed;                        // proměnná - okno zavřené
 bool modeMinimal;                         // proměnná - minimální teplotní mód
+bool heatOn;                              // proměnná - zapnout topení
+bool previousModeState;                   // proměnná - stav ModeMinimal z poslední smyčky
+
 
 float temp_Target;                                // cílová teplota
 float temp_Minimal = TEMP_MINIMAL;                // minimální teplota (nikdo nebydlí)
@@ -73,19 +66,17 @@ float temp_Upper_Threshold;                       // horní mez temp_Target
 float temp_Lower_Threshold;                       // spodní mez temp_Target
 
 
-bool heatOn;                                      // zapnout topení
-
-
-unsigned long previousTempMillis = 0;               // předchozí čas uplynutí intervalu měření teploty
-const long intervalTemp = MEASURE_TEMP_INTERVAL;    // interval měření teploty
+unsigned long previousTempMillis = 0;                             // předchozí čas uplynutí intervalu měření teploty
+const long intervalTemp = MEASURE_TEMP_INTERVAL;                  // interval měření teploty
 
 unsigned long previousDisplayRefreshMillis = 0;                   // předchozí čas uplynutí intervalu refreshe displeje
 const long intervalDisplayRefresh = REFRESH_DISPLAY_INTERVAL;     // interval refreshe displeje
 
 
 bool buttonOff = false;                   // tlačítko není stisknuté
-bool backlightState = true;               // podsvícení zapnuto
-unsigned long backlightStartTime = 0;     // časovač podsvícení nastaven
+bool displayOn = true;                    // displej zapnutý
+
+unsigned long displayStartTime = 0;     // časovač podsvícení nastaven
 
 
 void setup () {
@@ -108,7 +99,7 @@ void setup () {
 
   pinMode(PIN_WINDOW, INPUT_PULLUP);         // konfigurovat PIN_WINDOW jako vstup, nastavit interní pullup
   pinMode(PIN_MODE_SWITCH, INPUT_PULLUP);    // konfigurovat PIN_MODE_SWITCH jako vstup, nastavit interní pullup
-  pinMode(RELAY_PIN, OUTPUT);                // konfigurovat RELAY_PIN jako výstup
+  pinMode(PIN_RELAY, OUTPUT);                // konfigurovat PIN_RELAY jako výstup
 
   pinMode(BUTTON_PIN, INPUT_PULLUP);         // konfigurovat BUTTON_PIN jako vstup, nastavit interní pullup
 
@@ -136,7 +127,7 @@ void loop () {
 
 
     int analogValue = analogRead(PIN_POTENTIOMETER);                                                  // čtení vstupu na analogovém pinu PIN_POTENTIOMETER
-    temp_Manual = floatMap(analogValue, 0, 1023, TEMP_MAN_RANGE_MAX, TEMP_MAN_RANGE_MIN);             // temp_Manual - použití funkce floatMap (přeškálovat na teplotu temp_Manual (rozsah od do))
+    temp_Manual = floatMap(analogValue, 0, 1023, T_MANUAL_RANGE_MAX, T_MANUAL_RANGE_MIN);             // temp_Manual - použití funkce floatMap (přeškálovat na teplotu temp_Manual (rozsah od do))
 
 
 /*--------------------------------------------------------------------------------------------------
@@ -182,13 +173,15 @@ void loop () {
 
 /*------------------------------------------------------------------------------------------------*/
 
-  windowClosed = digitalRead(PIN_WINDOW);     // nastavit windowClosed podle vstupu
-                                              // obvod rozpojen windowClosed = TRUE
-                                              // obvod uzavřen windowClosed = FALSE
+    windowClosed = digitalRead(PIN_WINDOW);     // nastavit windowClosed podle vstupu
+                                                // obvod rozpojen windowClosed = TRUE
+                                                // obvod uzavřen windowClosed = FALSE
   
-  modeMinimal = digitalRead(PIN_MODE_SWITCH); // nastavit modeManual podle vstupu
-                                              // obvod rozpojen modeManual = TRUE
-                                              // obvod uzavřen modeManual = FALSE
+    modeMinimal = digitalRead(PIN_MODE_SWITCH); // nastavit modeManual podle vstupu
+                                                // obvod rozpojen modeManual = TRUE
+                                                // obvod uzavřen modeManual = FALSE
+
+    buttonOff = digitalRead(BUTTON_PIN);        // čtení stavu tlačítka
 
 /*------------------------------------------------------------------------------------------------*/
 
@@ -206,41 +199,51 @@ void loop () {
     if (temp_Average > temp_Upper_Threshold && windowClosed)
    {
     heatOn = false;                                                   // proměnná heatOn je nepravda
-    digitalWrite(RELAY_PIN, LOW);                                     // VYPNOUT RELÉ
+    digitalWrite(PIN_RELAY, LOW);                                     // VYPNOUT RELÉ
    } 
     if (temp_Average < temp_Lower_Threshold && windowClosed)
    {
     heatOn = true;                                                    // proměnná heatOn je pravda
-    digitalWrite(RELAY_PIN, HIGH);                                    // ZAPNOUT RELÉ
+    digitalWrite(PIN_RELAY, HIGH);                                    // ZAPNOUT RELÉ
    }
 
 
     if (!windowClosed)                                                // KDYŽ je otevřené okno
    {
     heatOn = false;
-    digitalWrite(RELAY_PIN, LOW);                                     // VYPNI RELÉ
+    digitalWrite(PIN_RELAY, LOW);                                     // VYPNI RELÉ
    }
 
 /*--------------------------------------------------------------------------------------------------
 ----------------------------------------------------------------------------------------------------
 --------------------------------------------------------------------------------------------------*/
 
-    buttonOff = digitalRead(BUTTON_PIN);    // čtení stavu tlačítka
-
     if (!buttonOff)                         // KDYŽ je tlačítko stisknuté (pullup otáčí hodnotu)
   {
-    backlightState = true;
-    lcd.display();
-    lcd.backlight();
-    backlightStartTime = millis();
+    displayOn = true;                       // stav displayOn = TRUE
+    lcd.display();                          // zapni displej
+    lcd.backlight();                        // zapni podsvícení
+    displayStartTime = millis();            // nastav počáteční stav zapnutí displeje
   }
 
-    if (backlightState == true && millis() - backlightStartTime >= DISPLAY_INTERVAL)
-  {
-    backlightState = false;
-    lcd.noBacklight();
-    lcd.noDisplay();
+    if (displayOn == true && millis() - displayStartTime >= DISPLAY_INTERVAL)
+  {                                         // KDYŽ je stav podsvícení true A ZÁROVEŇ čas od stisknutí tlačítka > interval
+    displayOn = false;                      // stav displayOn = FALSE
+    lcd.noBacklight();                      // vypni displej
+    lcd.noDisplay();                        // vypni podsvícení
   }
+
+/*------------------------------------------------------------------------------------------------*/
+
+    if (modeMinimal != previousModeState)   // KDYŽ se došlo k přepnutí režimu/módu vytápění
+  {
+    displayOn = true;
+    lcd.display();                          // zapni displej
+    lcd.backlight();                        // zapni podsvícení
+    displayStartTime = millis();            // nastav počáteční stav zapnutí displeje
+    previousModeState = modeMinimal;        // uloží současný stav do příští smyčky
+  }
+
 
 /*------------------------------------------------------------------------------------------------*/
   
@@ -252,6 +255,8 @@ void loop () {
   }
 
 
+    if (displayOn)
+  {
     lcd.setCursor(0,0);                   // nastav kurzor na LCD na 0,0
     if (now.hour() < 10)                  // KDYŽ HODINA < 10
   {                                       //
@@ -311,23 +316,23 @@ void loop () {
 
     lcd.setCursor(0,2);                   // nastav kurzor na LCD na 0,2
     if (windowClosed)                     // KDYŽ windowClosed je TRUE
-    {
+  {
     lcd.print("OKNO:ZAVR");               // zobraz na LCD "OKNO:ZAVR"
-    }
+  }
     else                                  // JINAK
-    {
+  {
     lcd.print("OKNO:OTEV");               // zobraz na LCD "OKNO:OTEV"
-    }
+  }
 
     lcd.setCursor(13,2);                  // nastav kurzor na LCD na 13,2
     if (modeMinimal)                      // KDYŽ modeMinimal
-    {
+  {
     lcd.print("NEBYDLI");                 // zobraz na LCD "NEBYDLI"
-    }
+  }
     else                                  // JINAK
-    {
+  {
     lcd.print("  BYDLI");                 // zobraz na LCD "  BYDLI"
-    }
+  }
 
     lcd.setCursor(0,3);                   // nastav kurzor na LCD na 0,3
     lcd.print("CIL:");                    // zobraz na LCD "CIL:"
@@ -337,13 +342,14 @@ void loop () {
 
     lcd.setCursor(13,3);                  // nastav kurzor na LCD na 13,3
     if (heatOn)                           // KDYŽ heatOn
-    {
+  {
     lcd.print("  TOPIM");                 // zobraz na LCD "  TOPIM"
-    }
+  }
     else                                  // JINAK
-    {
+  {
     lcd.print("NETOPIM");                 // zobraz na LCD "NETOPIM"
-    }
+  }
+  }
 
 
 /*--------------------------------------------------------------------------------------------------
@@ -513,4 +519,12 @@ float movingAverage(float value) {
     cvalues += 1;
 
   return sum/cvalues;
+}
+
+
+// FUNKCE PRO MAPOVÁNÍ
+
+float floatMap(float x, float in_min, float in_max, float out_min, float out_max) 
+{
+  return (x - in_min) * (out_max - out_min) / (in_max - in_min) + out_min;
 }
