@@ -1,39 +1,37 @@
-#include <RTClib.h>               // RTC knihovna
-#include <Wire.h>                 // I2C knihovna
-#include <LiquidCrystal_I2C.h>    // LCD knihovna
-#include <OneWire.h>              // OneWire knihovna
-#include <DallasTemperature.h>    // DS18B20 knihovna
+#include <RTClib.h>                           // RTC knihovna
+#include <Wire.h>                             // I2C knihovna
+#include <LiquidCrystal_I2C.h>                // LCD knihovna
+#include <OneWire.h>                          // OneWire knihovna
+#include <DallasTemperature.h>                // DS18B20 knihovna
 
+#define DAY_BEGINS                   6        // hodina kdy začíná den
+#define DAY_ENDS                     22       // hodina kdy již není den
 
-#define DAY_BEGINS                   6    // hodina kdy začíná den
-#define DAY_ENDS                     22   // hodina kdy již není den
+#define PIN_POTENTIOMETER            A0       // pin ke střednímu vývodu potenciometru
+#define PIN_TEMP_SENSOR              2        // pin připojený k DQ pinu senzoru DS18B20
+#define PIN_WINDOW                   3        // pin k relé okna
+#define PIN_MODE_SWITCH              4        // pin přepínače módu
+#define PIN_RELAY                    5        // pin připojený k ovládání relé
+#define PIN_BUTTON                   6        // pin tlačítka
 
-#define PIN_POTENTIOMETER            A0   // pin ke střednímu vývodu potenciometru
-#define TEMP_SENSOR_PIN              2    // pin připojený k DQ pinu senzoru DS18B20
-#define PIN_WINDOW                   3    // pin k relé okna
-#define PIN_MODE_SWITCH              4    // pin přepínače módu
-#define PIN_RELAY                    5    // pin připojený k ovládání relé
-#define BUTTON_PIN                   6    // pin tlačítka
+#define T_MANUAL_RANGE_MAX           24       // maximální teplota rozsahu T_MANUAL
+#define T_MANUAL_RANGE_MIN           16       // minimální teplota rozsahu T_MANUAL
 
-#define T_MANUAL_RANGE_MAX           24   // maximální teplota rozsahu T_MANUAL
-#define T_MANUAL_RANGE_MIN           16   // minimální teplota rozsahu T_MANUAL
+#define TEMP_OPERATIONAL_RANGE_LOW   0        // spodní hranice provozního rozsahu teploty
+#define TEMP_OPERATIONAL_RANGE_HIGH  50       // horní hranice provozního rozsahu teploty
 
-#define TEMP_OPERATIONAL_RANGE_LOW   0    // spodní hranice provozního rozsahu teploty
-#define TEMP_OPERATIONAL_RANGE_HIGH  50   // horní hranice provozního rozsahu teploty
-#define MOVING_AVG_WIN_SIZE          10   // počet průměrovaných hodnot klouzavého průměru
+#define REFRESH_DISPLAY_INTERVAL     1800000  // interval refreshe displeje (v ms)
+#define MEASURE_TEMP_INTERVAL        30000    // interval měření teploty (v ms)
+#define DISPLAY_INTERVAL             10000    // interval zapnutí displeje (v ms)
 
-#define REFRESH_DISPLAY_INTERVAL     1800000    // interval refreshe displeje (v ms)
-#define MEASURE_TEMP_INTERVAL        30000      // interval měření teploty (v ms)
-#define DISPLAY_INTERVAL             10000      // interval zapnutí displeje (v ms)
-
-#define TEMP_MINIMAL                 15    // teplota když apartmán není obydlen (minimální mód)
-#define TEMP_NIGHT_DECREASE          1     // snížení teploty v době noci o x stupňů C
-#define TEMP_HYSTERESIS              1     // hodnota hystereze směrem dolů (temp_Target -x°C)
-
+#define TEMP_MINIMAL                 15       // teplota když apartmán není obydlen (minimální mód)
+#define TEMP_NIGHT_DECREASE          1        // snížení teploty v době noci o x stupňů C
+#define TEMP_HYSTERESIS              1        // hodnota hystereze směrem dolů (temp_Target -x°C)
+#define MOVING_AVG_WIN_SIZE          10       // počet průměrovaných hodnot klouzavého průměru teploty
 
 RTC_DS3231 rtc;                           // vytvoření objektu rtc
 LiquidCrystal_I2C lcd(0x27,20,4);         // vytvoření objektu lcd, LCD je na defaultní adrese 0x27, má 20 znaků, 4 řádky
-OneWire oneWire(TEMP_SENSOR_PIN);         // nastavení oneWire instance na pinu TEMP_SENSOR_PIN
+OneWire oneWire(PIN_TEMP_SENSOR);         // nastavení oneWire instance na pinu PIN_TEMP_SENSOR
 DallasTemperature sensors(&oneWire);      // pass oneWire to DallasTemperature library
 
 
@@ -44,6 +42,7 @@ float temp_Manual;                        // teplota nastavená potenciometrem
 float temp_Sensor;                        // teplota senzoru ve stupních C
 float temp_Corrected;                     // teplota kalibrovaného senzoru ve stupních C
 float temp_Average;                       // klouzavý průměr temp_Corrected
+
 
 float temp_RawHigh = 100;                 // RAW DATA ze senzoru při varu
 float temp_RawLow = 0;                    // RAD DATA ze senzoru při trojném bodu
@@ -56,6 +55,8 @@ bool windowClosed;                        // proměnná - okno zavřené
 bool modeMinimal;                         // proměnná - minimální teplotní mód
 bool heatOn;                              // proměnná - zapnout topení
 bool previousModeState;                   // proměnná - stav ModeMinimal z poslední smyčky
+bool buttonOff = false;                   // tlačítko je stisknuté (v první smyčce - kvůli zapnutí displeje)
+bool displayOn = true;                    // displej zapnutý (v první smyčce - výchozí podmínka pro vypnutí displeje po uplynutí intervalu)
 
 
 float temp_Target;                                // cílová teplota
@@ -72,11 +73,8 @@ const long intervalTemp = MEASURE_TEMP_INTERVAL;                  // interval m�
 unsigned long previousDisplayRefreshMillis = 0;                   // předchozí čas uplynutí intervalu refreshe displeje
 const long intervalDisplayRefresh = REFRESH_DISPLAY_INTERVAL;     // interval refreshe displeje
 
-
-bool buttonOff = false;                   // tlačítko není stisknuté
-bool displayOn = true;                    // displej zapnutý
-
-unsigned long displayStartTime = 0;     // časovač podsvícení nastaven
+unsigned long displayStartTime = 0;                               // časovač podsvícení nastaven (v první smyčce displej zapnut -> =0)
+const long intervalDisplay = DISPLAY_INTERVAL;                    // interval zapnutého displeje
 
 
 void setup () {
@@ -101,7 +99,7 @@ void setup () {
   pinMode(PIN_MODE_SWITCH, INPUT_PULLUP);    // konfigurovat PIN_MODE_SWITCH jako vstup, nastavit interní pullup
   pinMode(PIN_RELAY, OUTPUT);                // konfigurovat PIN_RELAY jako výstup
 
-  pinMode(BUTTON_PIN, INPUT_PULLUP);         // konfigurovat BUTTON_PIN jako vstup, nastavit interní pullup
+  pinMode(PIN_BUTTON, INPUT_PULLUP);         // konfigurovat PIN_BUTTON jako vstup, nastavit interní pullup
 
   lcd.init();                             // inicializace LCD
   lcd.display();                          // zapnutí displeje (vypnutí by bylo "lcd.noDisplay();")
@@ -125,15 +123,10 @@ void loop () {
 
 /*------------------------------------------------------------------------------------------------*/
 
-
     int analogValue = analogRead(PIN_POTENTIOMETER);                                                  // čtení vstupu na analogovém pinu PIN_POTENTIOMETER
     temp_Manual = floatMap(analogValue, 0, 1023, T_MANUAL_RANGE_MAX, T_MANUAL_RANGE_MIN);             // temp_Manual - použití funkce floatMap (přeškálovat na teplotu temp_Manual (rozsah od do))
 
-
-/*--------------------------------------------------------------------------------------------------
-----------------------------------------------------------------------------------------------------
---------------------------------------------------------------------------------------------------*/
-
+/*------------------------------------------------------------------------------------------------*/
 
     if (temp_Sensor == NULL)                              // KDYŽ teplota nebyla ještě načtena
   {
@@ -181,7 +174,7 @@ void loop () {
                                                 // obvod rozpojen modeManual = TRUE
                                                 // obvod uzavřen modeManual = FALSE
 
-    buttonOff = digitalRead(BUTTON_PIN);        // čtení stavu tlačítka
+    buttonOff = digitalRead(PIN_BUTTON);        // čtení stavu tlačítka
 
 /*------------------------------------------------------------------------------------------------*/
 
@@ -214,9 +207,7 @@ void loop () {
     digitalWrite(PIN_RELAY, LOW);                                     // VYPNI RELÉ
    }
 
-/*--------------------------------------------------------------------------------------------------
-----------------------------------------------------------------------------------------------------
---------------------------------------------------------------------------------------------------*/
+/*------------------------------------------------------------------------------------------------*/
 
     if (!buttonOff)                         // KDYŽ je tlačítko stisknuté (pullup otáčí hodnotu)
   {
@@ -226,7 +217,7 @@ void loop () {
     displayStartTime = millis();            // nastav počáteční stav zapnutí displeje
   }
 
-    if (displayOn == true && millis() - displayStartTime >= DISPLAY_INTERVAL)
+    if (displayOn == true && millis() - displayStartTime >= intervalDisplay)
   {                                         // KDYŽ je stav podsvícení true A ZÁROVEŇ čas od stisknutí tlačítka > interval
     displayOn = false;                      // stav displayOn = FALSE
     lcd.noBacklight();                      // vypni displej
@@ -243,7 +234,6 @@ void loop () {
     displayStartTime = millis();            // nastav počáteční stav zapnutí displeje
     previousModeState = modeMinimal;        // uloží současný stav do příští smyčky
   }
-
 
 /*------------------------------------------------------------------------------------------------*/
   
@@ -351,10 +341,7 @@ void loop () {
   }
   }
 
-
-/*--------------------------------------------------------------------------------------------------
-----------------------------------------------------------------------------------------------------
---------------------------------------------------------------------------------------------------*/
+/*------------------------------------------------------------------------------------------------*/
 
     Serial.print("Date & Time: ");        // vypiš na sériovou linku "Date & Time: "
     Serial.print(now.year(), DEC);        // LOMÍTKO
@@ -419,15 +406,11 @@ void loop () {
     Serial.print(" NOC; ");               // vypiš na sériovou linku " NOC;"
   }
 
-/*------------------------------------------------------------------------------------------------*/
 
     Serial.print("T_MANUAL: ");           // vypiš na sériovou linku "T_MANUAL: "
     Serial.print(temp_Manual);            // vypiš na sériovou linku proměnnou temp_Manual
     Serial.print("°C");                   // vypiš na sériovou linku "°C"
 
-/*------------------------------------------------------------------------------------------------*/
-
-  
     Serial.print(" T_SENSOR: ");
     Serial.print(temp_Sensor);
     Serial.print("°C");
@@ -440,7 +423,6 @@ void loop () {
     Serial.print(temp_Average);
     Serial.print("°C");
 
-/*------------------------------------------------------------------------------------------------*/
 
   if (windowClosed) 
   {
@@ -460,13 +442,11 @@ void loop () {
     Serial.print(" MOD:BYDLI  ");
   }
 
-/*------------------------------------------------------------------------------------------------*/
 
     Serial.print(" T_TARGET: ");
     Serial.print(temp_Target);
     Serial.print("°C");
 
-/*------------------------------------------------------------------------------------------------*/
 
     if (heatOn)                           // KDYŽ heatOn = true
   {
@@ -477,17 +457,15 @@ void loop () {
     Serial.print(" NETOPIM");             // vypiš na sériovou linku " NETOPIM"
   }
 
-/*------------------------------------------------------------------------------------------------*/
 
-      // KDYŽ temp_Sensor je mimo provozní rozsah
-  if (temp_Sensor < TEMP_OPERATIONAL_RANGE_LOW || temp_Sensor > TEMP_OPERATIONAL_RANGE_HIGH) {
+      
+  if (temp_Sensor < TEMP_OPERATIONAL_RANGE_LOW || temp_Sensor > TEMP_OPERATIONAL_RANGE_HIGH)    // KDYŽ temp_Sensor je mimo provozní rozsah
+  {
     Serial.println();
     Serial.print(" TEMPERATURE OUT OF RANGE - ERROR ");
   }
 
-/*--------------------------------------------------------------------------------------------------
-----------------------------------------------------------------------------------------------------
---------------------------------------------------------------------------------------------------*/
+/*------------------------------------------------------------------------------------------------*/
 
     Serial.println();                     // nový řádek
 
