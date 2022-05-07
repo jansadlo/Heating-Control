@@ -35,11 +35,11 @@ OneWire oneWire(PIN_TEMP_SENSOR);         // nastavení oneWire instance na pinu
 DallasTemperature sensors(&oneWire);      // pass oneWire to DallasTemperature library
 
 
-char daysOfTheWeek[7][12] = {"Ne","Po","Ut","St","Ct","Pa","So"};
+char daysOfTheWeek[7][2] = {"Ne","Po","Ut","St","Ct","Pa","So"};
 
 
 float temp_Manual;                        // teplota nastavená potenciometrem
-float temp_Sensor;                        // teplota senzoru ve stupních C
+float temp_Sensor = 0;                    // teplota senzoru ve stupních C
 float temp_Corrected;                     // teplota kalibrovaného senzoru ve stupních C
 float temp_Average;                       // klouzavý průměr temp_Corrected
 
@@ -55,7 +55,7 @@ bool windowClosed;                        // proměnná - okno zavřené
 bool modeMinimal;                         // proměnná - minimální teplotní mód
 bool heatOn;                              // proměnná - zapnout topení
 bool previousModeState;                   // proměnná - stav ModeMinimal z poslední smyčky
-bool buttonOff = false;                   // tlačítko je stisknuté (v první smyčce - kvůli zapnutí displeje)
+bool buttonOn = true;                     // tlačítko je stisknuté (v první smyčce - kvůli zapnutí displeje)
 bool displayOn = true;                    // displej zapnutý (v první smyčce - výchozí podmínka pro vypnutí displeje po uplynutí intervalu)
 
 
@@ -112,14 +112,7 @@ void loop () {
     
     DateTime now = rtc.now();
     
-    if (now.hour(), DEC >= DAY_BEGINS && now.hour(), DEC < DAY_ENDS)      // KDYŽ HODINA je většíneborovna než DAY_BEGINS a zároveň menší než DAY_ENDS
-  {
-    isDay = true;                         // je den -> isDay = true
-  }                                       //
-    else                                  // JINAK
-  {                                       //
-    isDay = false;                        // je noc -> isDay = false
-  }
+    isDay = now.hour() >= DAY_BEGINS && now.hour() < DAY_ENDS;    // KDYŽ HODINA je většíneborovna než DAY_BEGINS a zároveň menší než DAY_ENDS
 
 /*------------------------------------------------------------------------------------------------*/
 
@@ -128,7 +121,7 @@ void loop () {
 
 /*------------------------------------------------------------------------------------------------*/
 
-    if (temp_Sensor == NULL)                              // KDYŽ teplota nebyla ještě načtena
+    if (! temp_Sensor)                                    // KDYŽ teplota nebyla ještě načtena
   {
     Serial.print("temp_Sensor == NULL; MEASURE TEMP CYCLE;");
     Serial.print(" REQUESTING TEMP...");
@@ -174,7 +167,7 @@ void loop () {
                                                 // obvod rozpojen modeManual = TRUE
                                                 // obvod uzavřen modeManual = FALSE
 
-    buttonOff = digitalRead(PIN_BUTTON);        // čtení stavu tlačítka
+    buttonOn = !digitalRead(PIN_BUTTON);        // čtení stavu tlačítka (pullup převrací hodnotu)
 
 /*------------------------------------------------------------------------------------------------*/
 
@@ -209,7 +202,7 @@ void loop () {
 
 /*------------------------------------------------------------------------------------------------*/
 
-    if (!buttonOff)                         // KDYŽ je tlačítko stisknuté (pullup otáčí hodnotu)
+    if (buttonOn)                           // KDYŽ je tlačítko stisknuté
   {
     displayOn = true;                       // stav displayOn = TRUE
     lcd.display();                          // zapni displej
@@ -217,7 +210,7 @@ void loop () {
     displayStartTime = millis();            // nastav počáteční stav zapnutí displeje
   }
 
-    if (displayOn == true && millis() - displayStartTime >= intervalDisplay)
+    else if (displayOn == true && millis() - displayStartTime >= intervalDisplay)
   {                                         // KDYŽ je stav podsvícení true A ZÁROVEŇ čas od stisknutí tlačítka > interval
     displayOn = false;                      // stav displayOn = FALSE
     lcd.noBacklight();                      // vypni displej
