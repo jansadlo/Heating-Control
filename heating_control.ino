@@ -35,7 +35,7 @@ OneWire oneWire(PIN_TEMP_SENSOR);         // nastavení oneWire instance na pinu
 DallasTemperature sensors(&oneWire);      // pass oneWire to DallasTemperature library
 
 
-char daysOfTheWeek[7][2] = {"Ne","Po","Ut","St","Ct","Pa","So"};
+char daysOfTheWeek[7][3] = {"Ne","Po","Ut","St","Ct","Pa","So"};
 
 
 float temp_Manual;                        // teplota nastavená potenciometrem
@@ -80,10 +80,10 @@ const long intervalDisplay = DISPLAY_INTERVAL;                    // interval za
 void setup () {
   Serial.begin(9600);
 
-  if (! rtc.begin()) {                    // NASTAVENÍ RTC MODULU
+  if (! rtc.begin()) {                       // NASTAVENÍ RTC MODULU
     Serial.println("Couldn't find RTC");
-    Serial.flush();
-    while (1);
+    // Serial.flush();
+    // while (1);                            // zasekne program
   }
 
   rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));           // nastavení data a času pro RTC na datum a čas v okamžiku kompilace kódu
@@ -91,14 +91,11 @@ void setup () {
                                                             // TENTO ŘÁDEK !!!!! ODSTRANIT !!!!!
                                                             // (jinak by se při resetu či výpadku napětí tento pevně stanovený čas do RTC nahrál znovu)
 
-
-  sensors.begin();                        // inicializace senzoru
-
+  sensors.begin();                           // inicializace senzoru
 
   pinMode(PIN_WINDOW, INPUT_PULLUP);         // konfigurovat PIN_WINDOW jako vstup, nastavit interní pullup
   pinMode(PIN_MODE_SWITCH, INPUT_PULLUP);    // konfigurovat PIN_MODE_SWITCH jako vstup, nastavit interní pullup
   pinMode(PIN_RELAY, OUTPUT);                // konfigurovat PIN_RELAY jako výstup
-
   pinMode(PIN_BUTTON, INPUT_PULLUP);         // konfigurovat PIN_BUTTON jako vstup, nastavit interní pullup
 
   lcd.init();                             // inicializace LCD
@@ -111,7 +108,7 @@ void setup () {
 void loop () {
     
     DateTime now = rtc.now();
-    
+
     isDay = now.hour() >= DAY_BEGINS && now.hour() < DAY_ENDS;    // KDYŽ HODINA je většíneborovna než DAY_BEGINS a zároveň menší než DAY_ENDS
 
 /*------------------------------------------------------------------------------------------------*/
@@ -244,31 +241,31 @@ void loop () {
     if (now.hour() < 10)                  // KDYŽ HODINA < 10
   {                                       //
     lcd.print("0");                       // zobraz na LCD "0"
-    lcd.print(now.hour(), DEC);           // zobraz na LCD hodinu
+    lcd.print(now.hour());                // zobraz na LCD hodinu
   }                                       //
     else                                  // JINAK
   {                                       //
-    lcd.print(now.hour(), DEC);           // zobraz na LCD hodinu
+    lcd.print(now.hour());                // zobraz na LCD hodinu
   }
     lcd.print(':');
     if (now.minute() < 10)                // KDYŽ MINUTA < 10
   {                                       //
     lcd.print("0");                       // zobraz na LCD "0"
-    lcd.print(now.minute(), DEC);         // zobraz na LCD minutu
+    lcd.print(now.minute());              // zobraz na LCD minutu
   }                                       //
     else                                  // JINAK
   {                                       //
-    lcd.print(now.minute(), DEC);         // zobraz na LCD minutu
+    lcd.print(now.minute());              // zobraz na LCD minutu
   }
     lcd.print(':');                       //
     if (now.second() < 10)                // KDYŽ SEKUNDA < 10
   {                                       //
     lcd.print("0");                       // zobraz na LCD "0"
-    lcd.print(now.second(), DEC);         // zobraz na LCD sekundu
+    lcd.print(now.second());              // zobraz na LCD sekundu
   }                                       //
     else                                  // JINAK
   {                                       //
-    lcd.print(now.second(), DEC);         // zobraz na LCD sekundu
+    lcd.print(now.second());              // zobraz na LCD sekundu
   }
 
     
@@ -337,26 +334,26 @@ void loop () {
 /*------------------------------------------------------------------------------------------------*/
 
     Serial.print("Date & Time: ");        // vypiš na sériovou linku "Date & Time: "
-    Serial.print(now.year(), DEC);        // LOMÍTKO
+    Serial.print(now.year());        // LOMÍTKO
     Serial.print('/');
     if (now.month() < 10)                 // KDYŽ MĚSÍC < 10
   {
     Serial.print('0');                    // vypiš na sériovou linku "0"
-    Serial.print(now.month(), DEC);       // vypiš na sériovou linku měsíc
+    Serial.print(now.month());       // vypiš na sériovou linku měsíc
   }                                       //
   else                                    // JINAK
   {                                       //
-    Serial.print(now.month(), DEC);       // vypiš na sériovou linku měsíc
+    Serial.print(now.month());       // vypiš na sériovou linku měsíc
   }
     Serial.print('/');                    // LOMÍTKO
     if (now.day() < 10)                   // KDYŽ DEN < 10
   {                                       //
     Serial.print('0');                    // vypiš na sériovou linku "0"
-    Serial.print(now.day(), DEC);         // vypiš na sériovou linku den
+    Serial.print(now.day());         // vypiš na sériovou linku den
   }                                       //
   else                                    // JINAK
   {                                       //
-    Serial.print(now.day(), DEC);         // vypiš na sériovou linku den
+    Serial.print(now.day());         // vypiš na sériovou linku den
   }
     Serial.print(" (");                   // vypiš na sériovou linku " ("
     Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);    // vypiš na sériovou linku den týdne
@@ -364,31 +361,31 @@ void loop () {
     if (now.hour() < 10)                  // KDYŽ HODINA < 10
   {                                       //
     Serial.print('0');                    // vypiš na sériovou linku "0"
-    Serial.print(now.hour(), DEC);        // vypiš na sériovou linku hodinu
+    Serial.print(now.hour());        // vypiš na sériovou linku hodinu
   }                                       //
   else                                    // JINAK
   {                                       //
-    Serial.print(now.hour(), DEC);        // vypiš na sériovou linku hodinu
+    Serial.print(now.hour());        // vypiš na sériovou linku hodinu
   }
     Serial.print(':');                    // DVOJTEČKA
     if (now.minute() < 10)                // když MINUTA < 10
   {                                       //
     Serial.print('0');                    // vypiš na sériovou linku "0"
-    Serial.print(now.minute(), DEC);      // vypiš na sériovou linku minutu
+    Serial.print(now.minute());      // vypiš na sériovou linku minutu
   }                                       //
     else                                  // JINAK
   {                                       //
-    Serial.print(now.minute(), DEC);      // vypiš na sériovou linku minutu
+    Serial.print(now.minute());      // vypiš na sériovou linku minutu
   }
     Serial.print(':');                    // DVOJTEČKA
     if (now.second() < 10)                // KDYŽ SEKUNDA < 10
   {                                       //
     Serial.print('0');                    // vypiš na sériovou linku "0"
-    Serial.print(now.second(), DEC);      // vypiš na sériovou linku sekundu
+    Serial.print(now.second());      // vypiš na sériovou linku sekundu
   }                                       //
     else                                  // JINAK
   {                                       //
-    Serial.print(now.second(), DEC);      // vypiš na sériovou linku sekundu
+    Serial.print(now.second());      // vypiš na sériovou linku sekundu
   }
     if (isDay)                            // KDYŽ isDay = true
   {
