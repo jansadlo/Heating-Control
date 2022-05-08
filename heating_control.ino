@@ -50,11 +50,12 @@ float temp_ReferenceHigh = 100;           // referenční teplota bodu varu !!! 
 float temp_ReferenceLow = 0;              // referenční teplota trojného bodu (přesná teplota 0,01 °C)
 
 
-bool isDay;                               // proměnná - je den
-bool windowClosed;                        // proměnná - okno zavřené
-bool modeMinimal;                         // proměnná - minimální teplotní mód
-bool heatOn;                              // proměnná - zapnout topení
-bool previousModeState;                   // proměnná - stav ModeMinimal z poslední smyčky
+bool DST = false;                          // proměnná - letní čas
+bool isDay;                               // je den
+bool windowClosed;                        // okno zavřené
+bool modeMinimal;                         // minimální teplotní mód
+bool heatOn;                              // zapnout topení
+bool previousModeState;                   // stav ModeMinimal z poslední smyčky
 bool buttonOn = true;                     // tlačítko je stisknuté (v první smyčce - kvůli zapnutí displeje)
 bool displayOn = true;                    // displej zapnutý (v první smyčce - výchozí podmínka pro vypnutí displeje po uplynutí intervalu)
 
@@ -91,6 +92,8 @@ void setup () {
                                                             // TENTO ŘÁDEK !!!!! ODSTRANIT !!!!!
                                                             // (jinak by se při resetu či výpadku napětí tento pevně stanovený čas do RTC nahrál znovu)
 
+  // rtc.adjust(DateTime(2022, 3, 27, 1, 59, 40));          // zápis nastavení času
+
   sensors.begin();                           // inicializace senzoru
 
   pinMode(PIN_WINDOW, INPUT_PULLUP);         // konfigurovat PIN_WINDOW jako vstup, nastavit interní pullup
@@ -108,6 +111,23 @@ void setup () {
 void loop () {
     
     DateTime now = rtc.now();
+
+    byte yy = now.year() % 100;
+    byte mm = now.month();
+    byte dd = now.day();
+    byte x1 = 31 - (yy + yy / 4 - 2) % 7;     // poslední neděle v Březnu
+    byte x2 = 31 - (yy + yy / 4 + 2) % 7;     // poslední neděle v Říjnu
+
+    if (((mm > 3 && mm < 10) || (mm == 3 && dd >= x1) || (mm == 10 && dd < x2)) && now.hour() >= 2 && DST == false)            // KDYŽ datum je větší nebo rovno než poslední neděle v Březnu AND
+   {                                                                                                                           // datum je menší než poslední neděle v Říjnu AND jsou 2 a více hodin AND není letní čas
+    DST = true;                                                                                                                // je letní čas
+    rtc.adjust(DateTime(yy, mm, dd, now.hour() + 1, now.minute(), now.second()));                                              // zvyš hodinu o 1
+   }
+    else if ((!(((mm > 3 && mm < 10) || (mm == 3 && dd >= x1) || (mm == 10 && dd < x2))) && now.hour() >= 3 && DST == true))   // KDYŽ datum je opak data z podmínky výše AND jsou 3 a více hodin AND je letní čas
+   {
+    DST = false;                                                                                                               // není letní čas
+    rtc.adjust(DateTime(yy, mm, dd, now.hour() - 1, now.minute(), now.second()));                                              // sniž hodinu o 1
+   }
 
     isDay = now.hour() >= DAY_BEGINS && now.hour() < DAY_ENDS;    // KDYŽ HODINA je většíneborovna než DAY_BEGINS a zároveň menší než DAY_ENDS
 
