@@ -50,7 +50,7 @@ float temp_ReferenceHigh = 100;           // referenční teplota bodu varu !!! 
 float temp_ReferenceLow = 0;              // referenční teplota trojného bodu (přesná teplota 0,01 °C)
 
 
-bool DST = false;                          // proměnná - letní čas
+bool DST = true;                          // proměnná - letní čas
 bool isDay;                               // je den
 bool windowClosed;                        // okno zavřené
 bool modeMinimal;                         // minimální teplotní mód
