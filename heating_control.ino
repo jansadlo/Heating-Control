@@ -283,11 +283,7 @@ void loop () {
 /*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
 /*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
     
-    if (temp_Heater < TEMP_HEATING_MINIMAL)                           // KDYŽ je teplota kotle nižší než TEMP_HEATING_MINIMAL
-  {
-    heatErr = true;                                                   // kotel JE v poruše
-  }
-
+    heatErr = temp_Heater < TEMP_HEATING_MINIMAL;                     // heatErr je true KDYŽ teplota kotle je nižší než TEMP_HEATING_MINIMAL
 
 /*------------------------------------------------------------------------------------------------*/
   
@@ -331,6 +327,8 @@ void loop () {
   {                                       //
     lcd.print(now.second());              // zobraz na LCD sekundu
   }
+
+    // lcd.print(now.timestamp(DateTime::TIMESTAMP_TIME));     // ČASOVÉ RAZÍTKO (alternativa - zabírá více paměti)
 
     
     lcd.setCursor(12,0);                  // nastav kurzor na LCD na 12,0
@@ -387,10 +385,10 @@ void loop () {
     lcd.setCursor(11,3);                  // nastav kurzor na LCD na 13,3
     if (heatOn)                           // KDYŽ heatOn
   {
-    if (heatErr)
-    lcd.print("POR.KOTLE");               // zobraz na LCD "POR.KOTLE"
-    else
+    if (!heatErr)                         // KDYŽ kotel není v poruše
     lcd.print("    TOPIM");               // zobraz na LCD "    TOPIM"
+    else
+    lcd.print("POR.KOTLE");               // zobraz na LCD "POR.KOTLE"
   }
     else                                  // JINAK
   {
@@ -452,6 +450,8 @@ void loop () {
   {                                       //
     Serial.print(now.second());           // vypiš na sériovou linku sekundu
   }
+    // Serial.print(now.timestamp(DateTime::TIMESTAMP_FULL));     // ČASOVÉ RAZÍTKO (alternativa - zabírá více paměti)
+    
     if (isDay)                            // KDYŽ isDay = true
   {
     Serial.print(" DEN; ");               // vypiš na sériovou linku " DEN;"
