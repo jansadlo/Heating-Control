@@ -13,32 +13,40 @@
 #define PIN_MODE_SWITCH              4        // pin přepínače módu
 #define PIN_RELAY                    5        // pin připojený k ovládání relé
 #define PIN_BUTTON                   6        // pin tlačítka
+#define PIN_HEATER_SENSOR            7        // pin senzoru kotle
 
 #define T_MANUAL_RANGE_MAX           24       // maximální teplota rozsahu T_MANUAL
 #define T_MANUAL_RANGE_MIN           16       // minimální teplota rozsahu T_MANUAL
 
 #define TEMP_OPERATIONAL_RANGE_LOW   0        // spodní hranice provozního rozsahu teploty
 #define TEMP_OPERATIONAL_RANGE_HIGH  50       // horní hranice provozního rozsahu teploty
+#define TEMP_HEATING_MINIMAL         40       // minimální teplota otopné soustavy
 
 #define REFRESH_DISPLAY_INTERVAL     1800000  // interval refreshe displeje (v ms)
 #define MEASURE_TEMP_INTERVAL        30000    // interval měření teploty (v ms)
 #define DISPLAY_INTERVAL             10000    // interval zapnutí displeje (v ms)
+#define HEAT_ERR_CHECK_INTERVAL      600000   // interval kontroly chyb kotle (v ms)
 
 #define TEMP_MINIMAL                 15       // teplota když apartmán není obydlen (minimální mód)
 #define TEMP_NIGHT_DECREASE          1        // snížení teploty v době noci o x stupňů C
 #define TEMP_HYSTERESIS              1        // hodnota hystereze směrem dolů (temp_Target -x°C)
 #define MOVING_AVG_WIN_SIZE          10       // počet průměrovaných hodnot klouzavého průměru teploty
 
+
+
 RTC_DS3231 rtc;                               // vytvoření objektu rtc
 LiquidCrystal_I2C lcd(0x27,20,4);             // vytvoření objektu lcd, LCD je na defaultní adrese 0x27, má 20 znaků, 4 řádky
-OneWire oneWire(PIN_TEMP_SENSOR);             // nastavení oneWire instance na pinu PIN_TEMP_SENSOR
-DallasTemperature sensors(&oneWire);          // pass oneWire to DallasTemperature library
+OneWire oneWireA(PIN_TEMP_SENSOR);            // nastavení oneWire instance na pinu PIN_TEMP_SENSOR
+OneWire oneWireB(PIN_HEATER_SENSOR);          // nastavení oneWire instance na pinu PIN_TEMP_SENSOR
+DallasTemperature sensorA(&oneWireA);         // pass oneWireA to DallasTemperature library
+DallasTemperature sensorB(&oneWireB);         // pass oneWireB to DallasTemperature library
 
 
 float temp_Manual;                            // teplota nastavená potenciometrem
 float temp_Sensor = 0;                        // teplota senzoru ve stupních C
 float temp_Corrected;                         // teplota kalibrovaného senzoru ve stupních C
 float temp_Average;                           // klouzavý průměr temp_Corrected
+float temp_Heater;                            // teplota senzoru kotle
 
 
 float temp_RawHigh = 100;                     // RAW DATA ze senzoru při varu
@@ -55,6 +63,8 @@ bool heatOn;                                  // zapnout topení
 bool previousModeState;                       // stav ModeMinimal z poslední smyčky
 bool buttonOn = true;                         // tlačítko je stisknuté (v první smyčce - kvůli zapnutí displeje)
 bool displayOn = true;                        // displej zapnutý (v první smyčce - výchozí podmínka pro vypnutí displeje po uplynutí intervalu)
+bool previousHeatState = false;               // předchozí stav kotle
+bool heatErr = false;                         // kotel v poruše
 
 
 float temp_Target;                                // cílová teplota
@@ -74,6 +84,10 @@ const long intervalDisplayRefresh = REFRESH_DISPLAY_INTERVAL;     // interval re
 unsigned long displayStartTime = 0;                               // časovač podsvícení nastaven (v první smyčce displej zapnut -> =0)
 const long intervalDisplay = DISPLAY_INTERVAL;                    // interval zapnutého displeje
 
+unsigned long heatOnStartTime = 0;                                // čas zapnutí kotle
+unsigned long previousHeatErrCheckMillis = 0;                     // předchozí čas uplynutí intervalu kontroly kotle
+const long intervalHeatErrCheck = HEAT_ERR_CHECK_INTERVAL;        // interval kontroly chyb kotle
+
 
 void setup () {
   Serial.begin(9600);
@@ -91,7 +105,8 @@ void setup () {
 
   // rtc.adjust(DateTime(2022, 3, 27, 1, 59, 40));          // zápis nastavení času
 
-  sensors.begin();                           // inicializace senzoru
+  sensorA.begin();                           // inicializace senzoru v apartmánu
+  sensorB.begin();                           // inicializace senzoru kotle
 
   pinMode(PIN_WINDOW, INPUT_PULLUP);         // konfigurovat PIN_WINDOW jako vstup, nastavit interní pullup
   pinMode(PIN_MODE_SWITCH, INPUT_PULLUP);    // konfigurovat PIN_MODE_SWITCH jako vstup, nastavit interní pullup
@@ -141,9 +156,9 @@ void loop () {
   {
     Serial.print("temp_Sensor == NULL; MEASURE TEMP CYCLE;");
     Serial.print(" REQUESTING TEMP...");
-    sensors.requestTemperatures();                                    // příkaz k získání teploty
+    sensorA.requestTemperatures();                                    // příkaz k získání teploty
     Serial.println(" DONE;");
-    temp_Sensor = sensors.getTempCByIndex(0);                         // čtení teploty ve stupních C
+    temp_Sensor = sensorA.getTempCByIndex(0);                         // čtení teploty ve stupních C
     
     // KALIBRACE temp_Sensor --> temp_Corrected
     float temp_RawRange = temp_RawHigh - temp_RawLow;
@@ -160,9 +175,9 @@ void loop () {
 
     Serial.print("MEASURE TEMP CYCLE;");
     Serial.print(" REQUESTING TEMP...");
-    sensors.requestTemperatures();                                    // příkaz k získání teploty
+    sensorA.requestTemperatures();                                    // příkaz k získání teploty
     Serial.println(" DONE;");
-    temp_Sensor = sensors.getTempCByIndex(0);                         // čtení teploty ve stupních C
+    temp_Sensor = sensorA.getTempCByIndex(0);                         // čtení teploty ve stupních C
 
     
     // KALIBRACE temp_Sensor --> temp_Corrected
@@ -240,9 +255,39 @@ void loop () {
     displayOn = true;
     lcd.display();                                                    // zapni displej
     lcd.backlight();                                                  // zapni podsvícení
-    displayStartTime = millis();                                      // nastav počáteční stav zapnutí displeje
+    displayStartTime = millis();                                      // nastav počáteční čas zapnutí displeje
     previousModeState = modeMinimal;                                  // uloží současný stav do příští smyčky
   }
+
+/*------------------------------------------------------------------------------------------------*/
+
+    if (heatOn && previousHeatState == false)                         // KDYŽ je kotel zapnutý A ZÁROVEŇ byl předtím vypnutý
+  {
+
+  }
+
+/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
+/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
+/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
+/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
+/*
+    Serial.print("MEASURE TEMP HEATER CYCLE;");
+    Serial.print(" REQUESTING TEMP...");
+    sensorB.requestTemperatures();                                    // příkaz k získání teploty
+    Serial.println(" DONE;");
+    temp_Heater = sensorB.getTempCByIndex(0);                         // čtení teploty ve stupních C
+
+                                                                                                  */
+/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
+/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
+/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
+/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
+    
+    if (temp_Heater < TEMP_HEATING_MINIMAL)                           // KDYŽ je teplota kotle nižší než TEMP_HEATING_MINIMAL
+  {
+    heatErr = true;                                                   // kotel JE v poruše
+  }
+
 
 /*------------------------------------------------------------------------------------------------*/
   
@@ -339,14 +384,17 @@ void loop () {
     lcd.print(char(223));                 // zobraz na LCD znak "°"
     lcd.print("C");                       // zobraz na LCD "C"
 
-    lcd.setCursor(13,3);                  // nastav kurzor na LCD na 13,3
+    lcd.setCursor(11,3);                  // nastav kurzor na LCD na 13,3
     if (heatOn)                           // KDYŽ heatOn
   {
-    lcd.print("  TOPIM");                 // zobraz na LCD "  TOPIM"
+    if (heatErr)
+    lcd.print("POR.KOTLE");               // zobraz na LCD "POR.KOTLE"
+    else
+    lcd.print("    TOPIM");               // zobraz na LCD "    TOPIM"
   }
     else                                  // JINAK
   {
-    lcd.print("NETOPIM");                 // zobraz na LCD "NETOPIM"
+    lcd.print("  NETOPIM");               // zobraz na LCD "  NETOPIM"
   }
   }
 
@@ -360,7 +408,7 @@ void loop () {
     Serial.print('0');                    // vypiš na sériovou linku "0"
     Serial.print(now.month());            // vypiš na sériovou linku měsíc
   }                                       //
-  else                                    // JINAK
+    else                                  // JINAK
   {                                       //
     Serial.print(now.month());            // vypiš na sériovou linku měsíc
   }
@@ -370,7 +418,7 @@ void loop () {
     Serial.print('0');                    // vypiš na sériovou linku "0"
     Serial.print(now.day());              // vypiš na sériovou linku den
   }                                       //
-  else                                    // JINAK
+    else                                  // JINAK
   {                                       //
     Serial.print(now.day());              // vypiš na sériovou linku den
   }
@@ -380,7 +428,7 @@ void loop () {
     Serial.print('0');                    // vypiš na sériovou linku "0"
     Serial.print(now.hour());             // vypiš na sériovou linku hodinu
   }                                       //
-  else                                    // JINAK
+    else                                  // JINAK
   {                                       //
     Serial.print(now.hour());             // vypiš na sériovou linku hodinu
   }
@@ -431,20 +479,20 @@ void loop () {
     Serial.print("°C");                   // vypiš na sériovou linku "°C"
 
 
-  if (windowClosed) 
+    if (windowClosed) 
   {
     Serial.print(" OKNO:ZAVRENO ");
   }
-  else 
+    else 
   {
     Serial.print(" OKNO:OTEVRENO");
   }
 
-  if (modeMinimal) 
+    if (modeMinimal) 
   {
     Serial.print(" MOD:NEBYDLI");
   }
-  else 
+    else 
   {
     Serial.print(" MOD:BYDLI  ");
   }
@@ -466,10 +514,17 @@ void loop () {
 
 
       
-  if (temp_Sensor < TEMP_OPERATIONAL_RANGE_LOW || temp_Sensor > TEMP_OPERATIONAL_RANGE_HIGH)    // KDYŽ temp_Sensor je mimo provozní rozsah
+    if (temp_Sensor < TEMP_OPERATIONAL_RANGE_LOW || temp_Sensor > TEMP_OPERATIONAL_RANGE_HIGH)    // KDYŽ temp_Sensor je mimo provozní rozsah
   {
     Serial.println();
     Serial.print(" TEMPERATURE OUT OF RANGE - ERROR ");
+  }
+
+
+      if (heatErr)                        // KDYŽ je kotel v poruše
+  {
+    Serial.println();
+    Serial.print(" HEATER ERROR ");
   }
 
 /*------------------------------------------------------------------------------------------------*/
