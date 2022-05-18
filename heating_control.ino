@@ -20,7 +20,7 @@
 
 #define TEMP_OPERATIONAL_RANGE_LOW   0        // spodní hranice provozního rozsahu teploty
 #define TEMP_OPERATIONAL_RANGE_HIGH  50       // horní hranice provozního rozsahu teploty
-#define TEMP_HEATING_MINIMAL         40       // minimální teplota otopné soustavy
+#define TEMP_HEATING_MINIMAL         35       // minimální teplota otopné soustavy
 
 #define REFRESH_DISPLAY_INTERVAL     1800000  // interval refreshe displeje (v ms)
 #define MEASURE_TEMP_INTERVAL        30000    // interval měření teploty (v ms)
@@ -46,7 +46,7 @@ float temp_Manual;                            // teplota nastavená potenciometr
 float temp_Sensor = 0;                        // teplota senzoru ve stupních C
 float temp_Corrected;                         // teplota kalibrovaného senzoru ve stupních C
 float temp_Average;                           // klouzavý průměr temp_Corrected
-float temp_Heater;                            // teplota senzoru kotle
+float temp_Heater = 45;                       // teplota senzoru kotle
 
 
 float temp_RawHigh = 100;                     // RAW DATA ze senzoru při varu
@@ -261,29 +261,30 @@ void loop () {
 
 /*------------------------------------------------------------------------------------------------*/
 
-    if (heatOn && previousHeatState == false)                         // KDYŽ je kotel zapnutý A ZÁROVEŇ byl předtím vypnutý
+    unsigned long currentHeatErrCheckMillis = millis();               // načtení současného času běhu smyčky
+    if (heatOn)                                                       // KDYŽ je kotel zapnutý
   {
-
+    if (previousHeatState == false)                                   // KDYŽ je kotel zapnutý A ZÁROVEŇ byl předtím vypnutý
+  {
+    heatOnStartTime = millis();                                       // nastav čas zapnutí kotle
   }
-
-/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
-/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
-/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
-/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
-/*
+    if ((currentHeatErrCheckMillis - previousHeatErrCheckMillis >= intervalHeatErrCheck) || (currentHeatErrCheckMillis - heatOnStartTime >= intervalHeatErrCheck))
+  {                                                                   // MĚŘENÍ INTERVALU od posledního splnění podmínky
+    previousHeatErrCheckMillis = currentHeatErrCheckMillis;           // uloží čas současného provedení IF do příští smyčky
     Serial.print("MEASURE TEMP HEATER CYCLE;");
     Serial.print(" REQUESTING TEMP...");
     sensorB.requestTemperatures();                                    // příkaz k získání teploty
     Serial.println(" DONE;");
     temp_Heater = sensorB.getTempCByIndex(0);                         // čtení teploty ve stupních C
-
-                                                                                                  */
-/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
-/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
-/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
-/*------------------------DODĚLAT ČASOVAČ KONTROLY KOTLE------------------------------------------*/
-    
     heatErr = temp_Heater < TEMP_HEATING_MINIMAL;                     // heatErr je true KDYŽ teplota kotle je nižší než TEMP_HEATING_MINIMAL
+  }
+  }
+    else                                                              // JINAK
+  {
+    previousHeatErrCheckMillis = currentHeatErrCheckMillis;           // uloží čas současného provedení IF do příští smyčky (RESET)
+    heatErr = false;                                                  // heatErr je nepravda
+  }
+
 
 /*------------------------------------------------------------------------------------------------*/
   
@@ -476,6 +477,10 @@ void loop () {
 
     Serial.print(" T_AVERAGE: ");         // vypiš na sériovou linku "T_AVERAGE: "
     Serial.print(temp_Average);           // vypiš na sériovou linku proměnnou temp_Average
+    Serial.print("°C");                   // vypiš na sériovou linku "°C"
+
+    Serial.print(" T_HEATER: ");          // vypiš na sériovou linku "T_HEATER: "
+    Serial.print(temp_Heater);            // vypiš na sériovou linku proměnnou temp_Average
     Serial.print("°C");                   // vypiš na sériovou linku "°C"
 
 
