@@ -282,7 +282,7 @@ void loop () {
     else                                                              // JINAK
   {
     previousHeatErrCheckMillis = currentHeatErrCheckMillis;           // uloží čas současného provedení IF do příští smyčky (RESET)
-    heatErr = false;                                                  // heatErr je nepravda
+    heatErr = false;                                                  // heatErr je nepravda (když není heatOn, porucha se resetuje/vymaže)
   }
 
 
