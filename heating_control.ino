@@ -29,35 +29,32 @@
 #define TEMP_HYSTERESIS              1        // hodnota hystereze směrem dolů (temp_Target -x°C)
 #define MOVING_AVG_WIN_SIZE          10       // počet průměrovaných hodnot klouzavého průměru teploty
 
-RTC_DS3231 rtc;                           // vytvoření objektu rtc
-LiquidCrystal_I2C lcd(0x27,20,4);         // vytvoření objektu lcd, LCD je na defaultní adrese 0x27, má 20 znaků, 4 řádky
-OneWire oneWire(PIN_TEMP_SENSOR);         // nastavení oneWire instance na pinu PIN_TEMP_SENSOR
-DallasTemperature sensors(&oneWire);      // pass oneWire to DallasTemperature library
+RTC_DS3231 rtc;                               // vytvoření objektu rtc
+LiquidCrystal_I2C lcd(0x27,20,4);             // vytvoření objektu lcd, LCD je na defaultní adrese 0x27, má 20 znaků, 4 řádky
+OneWire oneWire(PIN_TEMP_SENSOR);             // nastavení oneWire instance na pinu PIN_TEMP_SENSOR
+DallasTemperature sensors(&oneWire);          // pass oneWire to DallasTemperature library
 
 
-char daysOfTheWeek[7][3] = {"Ne","Po","Ut","St","Ct","Pa","So"};
+float temp_Manual;                            // teplota nastavená potenciometrem
+float temp_Sensor = 0;                        // teplota senzoru ve stupních C
+float temp_Corrected;                         // teplota kalibrovaného senzoru ve stupních C
+float temp_Average;                           // klouzavý průměr temp_Corrected
 
 
-float temp_Manual;                        // teplota nastavená potenciometrem
-float temp_Sensor = 0;                    // teplota senzoru ve stupních C
-float temp_Corrected;                     // teplota kalibrovaného senzoru ve stupních C
-float temp_Average;                       // klouzavý průměr temp_Corrected
+float temp_RawHigh = 100;                     // RAW DATA ze senzoru při varu
+float temp_RawLow = 0;                        // RAD DATA ze senzoru při trojném bodu
+float temp_ReferenceHigh = 100;               // referenční teplota bodu varu !!! při úpravě podle atmosférického tlaku !!!
+float temp_ReferenceLow = 0;                  // referenční teplota trojného bodu (přesná teplota 0,01 °C)
 
 
-float temp_RawHigh = 100;                 // RAW DATA ze senzoru při varu
-float temp_RawLow = 0;                    // RAD DATA ze senzoru při trojném bodu
-float temp_ReferenceHigh = 100;           // referenční teplota bodu varu !!! při úpravě podle atmosférického tlaku !!!
-float temp_ReferenceLow = 0;              // referenční teplota trojného bodu (přesná teplota 0,01 °C)
-
-
-bool DST = true;                          // proměnná - letní čas
-bool isDay;                               // je den
-bool windowClosed;                        // okno zavřené
-bool modeMinimal;                         // minimální teplotní mód
-bool heatOn;                              // zapnout topení
-bool previousModeState;                   // stav ModeMinimal z poslední smyčky
-bool buttonOn = true;                     // tlačítko je stisknuté (v první smyčce - kvůli zapnutí displeje)
-bool displayOn = true;                    // displej zapnutý (v první smyčce - výchozí podmínka pro vypnutí displeje po uplynutí intervalu)
+bool DST = true;                              // proměnná - letní čas
+bool isDay;                                   // je den
+bool windowClosed;                            // okno zavřené
+bool modeMinimal;                             // minimální teplotní mód
+bool heatOn;                                  // zapnout topení
+bool previousModeState;                       // stav ModeMinimal z poslední smyčky
+bool buttonOn = true;                         // tlačítko je stisknuté (v první smyčce - kvůli zapnutí displeje)
+bool displayOn = true;                        // displej zapnutý (v první smyčce - výchozí podmínka pro vypnutí displeje po uplynutí intervalu)
 
 
 float temp_Target;                                // cílová teplota
@@ -101,10 +98,10 @@ void setup () {
   pinMode(PIN_RELAY, OUTPUT);                // konfigurovat PIN_RELAY jako výstup
   pinMode(PIN_BUTTON, INPUT_PULLUP);         // konfigurovat PIN_BUTTON jako vstup, nastavit interní pullup
 
-  lcd.init();                             // inicializace LCD
-  lcd.display();                          // zapnutí displeje (vypnutí by bylo "lcd.noDisplay();")
-  lcd.backlight();                        // zapnutí podsvícení (vypnutí by bylo "lcd.noBacklight();")
-  lcd.clear();                            // refresh displeje
+  lcd.init();                                 // inicializace LCD
+  lcd.display();                              // zapnutí displeje (vypnutí by bylo "lcd.noDisplay();")
+  lcd.backlight();                            // zapnutí podsvícení (vypnutí by bylo "lcd.noBacklight();")
+  lcd.clear();                                // refresh displeje
 
   }
 
@@ -112,7 +109,7 @@ void loop () {
     
     DateTime now = rtc.now();
 
-    byte yy = now.year() % 100;
+    byte yy = now.year() % 100;               // zbytek po dělení 100
     byte mm = now.month();
     byte dd = now.day();
     byte x1 = 31 - (yy + yy / 4 - 2) % 7;     // poslední neděle v Březnu
@@ -129,7 +126,9 @@ void loop () {
     rtc.adjust(DateTime(yy, mm, dd, now.hour() - 1, now.minute(), now.second()));                                              // sniž hodinu o 1
    }
 
-    isDay = now.hour() >= DAY_BEGINS && now.hour() < DAY_ENDS;    // KDYŽ HODINA je většíneborovna než DAY_BEGINS a zároveň menší než DAY_ENDS
+/*------------------------------------------------------------------------------------------------*/
+
+    isDay = now.hour() >= DAY_BEGINS && now.hour() < DAY_ENDS;        // isDay je true KDYŽ HODINA je většíneborovna než DAY_BEGINS a zároveň menší než DAY_ENDS
 
 /*------------------------------------------------------------------------------------------------*/
 
@@ -138,20 +137,20 @@ void loop () {
 
 /*------------------------------------------------------------------------------------------------*/
 
-    if (! temp_Sensor)                                    // KDYŽ teplota nebyla ještě načtena
+    if (! temp_Sensor)                                                // KDYŽ teplota nebyla ještě načtena
   {
     Serial.print("temp_Sensor == NULL; MEASURE TEMP CYCLE;");
     Serial.print(" REQUESTING TEMP...");
-    sensors.requestTemperatures();                        // příkaz k získání teploty
+    sensors.requestTemperatures();                                    // příkaz k získání teploty
     Serial.println(" DONE;");
-    temp_Sensor = sensors.getTempCByIndex(0);             // čtení teploty ve stupních C
+    temp_Sensor = sensors.getTempCByIndex(0);                         // čtení teploty ve stupních C
     
     // KALIBRACE temp_Sensor --> temp_Corrected
     float temp_RawRange = temp_RawHigh - temp_RawLow;
     float temp_ReferenceRange = temp_ReferenceHigh - temp_ReferenceLow;
     temp_Corrected = (((temp_Sensor - temp_RawLow) * temp_ReferenceRange) / temp_RawRange) + temp_ReferenceLow;
 
-    temp_Average = movingAverage(temp_Corrected);         // klouzavý průměr
+    temp_Average = movingAverage(temp_Corrected);                     // klouzavý průměr
   }
   
   unsigned long currentTempMillis = millis();                         // načtení současného času běhu smyčky
@@ -161,9 +160,9 @@ void loop () {
 
     Serial.print("MEASURE TEMP CYCLE;");
     Serial.print(" REQUESTING TEMP...");
-    sensors.requestTemperatures();                        // příkaz k získání teploty
+    sensors.requestTemperatures();                                    // příkaz k získání teploty
     Serial.println(" DONE;");
-    temp_Sensor = sensors.getTempCByIndex(0);             // čtení teploty ve stupních C
+    temp_Sensor = sensors.getTempCByIndex(0);                         // čtení teploty ve stupních C
 
     
     // KALIBRACE temp_Sensor --> temp_Corrected
@@ -171,25 +170,25 @@ void loop () {
     float temp_ReferenceRange = temp_ReferenceHigh - temp_ReferenceLow;
     temp_Corrected = (((temp_Sensor - temp_RawLow) * temp_ReferenceRange) / temp_RawRange) + temp_ReferenceLow;
 
-    temp_Average = movingAverage(temp_Corrected);         // klouzavý průměr
+    temp_Average = movingAverage(temp_Corrected);                     // klouzavý průměr
   }
 
 /*------------------------------------------------------------------------------------------------*/
 
-    windowClosed = digitalRead(PIN_WINDOW);     // nastavit windowClosed podle vstupu
-                                                // obvod rozpojen windowClosed = TRUE
-                                                // obvod uzavřen windowClosed = FALSE
+    windowClosed = digitalRead(PIN_WINDOW);                           // nastavit windowClosed podle vstupu
+                                                                      // obvod rozpojen windowClosed = TRUE
+                                                                      // obvod uzavřen windowClosed = FALSE
   
-    modeMinimal = digitalRead(PIN_MODE_SWITCH); // nastavit modeManual podle vstupu
-                                                // obvod rozpojen modeManual = TRUE
-                                                // obvod uzavřen modeManual = FALSE
+    modeMinimal = digitalRead(PIN_MODE_SWITCH);                       // nastavit modeManual podle vstupu
+                                                                      // obvod rozpojen modeManual = TRUE
+                                                                      // obvod uzavřen modeManual = FALSE
 
-    buttonOn = !digitalRead(PIN_BUTTON);        // čtení stavu tlačítka (pullup převrací hodnotu)
+    buttonOn = !digitalRead(PIN_BUTTON);                              // čtení stavu tlačítka (pullup převrací hodnotu)
 
 /*------------------------------------------------------------------------------------------------*/
 
-    if (modeMinimal) temp_Target = temp_Minimal;      // KDYŽ v apartmánu nikdo nebydlí, cílová teplota je Minimal
-    else temp_Target = temp_Manual;                   // JINAK je teplota v manuálním režimu
+    if (modeMinimal) temp_Target = temp_Minimal;                      // KDYŽ v apartmánu nikdo nebydlí, cílová teplota je Minimal
+    else temp_Target = temp_Manual;                                   // JINAK je teplota v manuálním režimu
 
 /*------------------------------------------------------------------------------------------------*/
 
@@ -219,30 +218,30 @@ void loop () {
 
 /*------------------------------------------------------------------------------------------------*/
 
-    if (buttonOn)                           // KDYŽ je tlačítko stisknuté
+    if (buttonOn)                                                     // KDYŽ je tlačítko stisknuté
   {
-    displayOn = true;                       // stav displayOn = TRUE
-    lcd.display();                          // zapni displej
-    lcd.backlight();                        // zapni podsvícení
-    displayStartTime = millis();            // nastav počáteční stav zapnutí displeje
+    displayOn = true;                                                 // stav displayOn = TRUE
+    lcd.display();                                                    // zapni displej
+    lcd.backlight();                                                  // zapni podsvícení
+    displayStartTime = millis();                                      // nastav počáteční stav zapnutí displeje
   }
 
     else if (displayOn == true && millis() - displayStartTime >= intervalDisplay)
-  {                                         // KDYŽ je stav podsvícení true A ZÁROVEŇ čas od stisknutí tlačítka > interval
-    displayOn = false;                      // stav displayOn = FALSE
-    lcd.noBacklight();                      // vypni displej
-    lcd.noDisplay();                        // vypni podsvícení
+  {                                                                   // KDYŽ je stav podsvícení true A ZÁROVEŇ čas od stisknutí tlačítka > interval
+    displayOn = false;                                                // stav displayOn = FALSE
+    lcd.noBacklight();                                                // vypni displej
+    lcd.noDisplay();                                                  // vypni podsvícení
   }
 
 /*------------------------------------------------------------------------------------------------*/
 
-    if (modeMinimal != previousModeState)   // KDYŽ se došlo k přepnutí režimu/módu vytápění
+    if (modeMinimal != previousModeState)                             // KDYŽ se došlo k přepnutí režimu/módu vytápění
   {
     displayOn = true;
-    lcd.display();                          // zapni displej
-    lcd.backlight();                        // zapni podsvícení
-    displayStartTime = millis();            // nastav počáteční stav zapnutí displeje
-    previousModeState = modeMinimal;        // uloží současný stav do příští smyčky
+    lcd.display();                                                    // zapni displej
+    lcd.backlight();                                                  // zapni podsvícení
+    displayStartTime = millis();                                      // nastav počáteční stav zapnutí displeje
+    previousModeState = modeMinimal;                                  // uloží současný stav do příští smyčky
   }
 
 /*------------------------------------------------------------------------------------------------*/
@@ -250,8 +249,8 @@ void loop () {
   unsigned long currentDisplayRefreshMillis = millis();                                         // načtení současného času běhu smyčky
     if (currentDisplayRefreshMillis - previousDisplayRefreshMillis >= intervalDisplayRefresh)   // MĚŘENÍ INTERVALU od posledního splnění podmínky
   {                                                                                             
-    previousDisplayRefreshMillis = currentDisplayRefreshMillis;         // uloží čas současného provedení IF do příští smyčky
-    lcd.clear();                                                        // REFRESH obrazovky
+    previousDisplayRefreshMillis = currentDisplayRefreshMillis;       // uloží čas současného provedení IF do příští smyčky
+    lcd.clear();                                                      // REFRESH obrazovky
   }
 
 
@@ -354,58 +353,56 @@ void loop () {
 /*------------------------------------------------------------------------------------------------*/
 
     Serial.print("Date & Time: ");        // vypiš na sériovou linku "Date & Time: "
-    Serial.print(now.year());        // LOMÍTKO
+    Serial.print(now.year());             // LOMÍTKO
     Serial.print('/');
     if (now.month() < 10)                 // KDYŽ MĚSÍC < 10
   {
     Serial.print('0');                    // vypiš na sériovou linku "0"
-    Serial.print(now.month());       // vypiš na sériovou linku měsíc
+    Serial.print(now.month());            // vypiš na sériovou linku měsíc
   }                                       //
   else                                    // JINAK
   {                                       //
-    Serial.print(now.month());       // vypiš na sériovou linku měsíc
+    Serial.print(now.month());            // vypiš na sériovou linku měsíc
   }
     Serial.print('/');                    // LOMÍTKO
     if (now.day() < 10)                   // KDYŽ DEN < 10
   {                                       //
     Serial.print('0');                    // vypiš na sériovou linku "0"
-    Serial.print(now.day());         // vypiš na sériovou linku den
+    Serial.print(now.day());              // vypiš na sériovou linku den
   }                                       //
   else                                    // JINAK
   {                                       //
-    Serial.print(now.day());         // vypiš na sériovou linku den
+    Serial.print(now.day());              // vypiš na sériovou linku den
   }
-    Serial.print(" (");                   // vypiš na sériovou linku " ("
-    Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);    // vypiš na sériovou linku den týdne
-    Serial.print(") ");                   // vypiš na sériovou linku ") "
+    Serial.print(" ");                    // vypiš na sériovou linku " "
     if (now.hour() < 10)                  // KDYŽ HODINA < 10
   {                                       //
     Serial.print('0');                    // vypiš na sériovou linku "0"
-    Serial.print(now.hour());        // vypiš na sériovou linku hodinu
+    Serial.print(now.hour());             // vypiš na sériovou linku hodinu
   }                                       //
   else                                    // JINAK
   {                                       //
-    Serial.print(now.hour());        // vypiš na sériovou linku hodinu
+    Serial.print(now.hour());             // vypiš na sériovou linku hodinu
   }
     Serial.print(':');                    // DVOJTEČKA
     if (now.minute() < 10)                // když MINUTA < 10
   {                                       //
     Serial.print('0');                    // vypiš na sériovou linku "0"
-    Serial.print(now.minute());      // vypiš na sériovou linku minutu
+    Serial.print(now.minute());           // vypiš na sériovou linku minutu
   }                                       //
     else                                  // JINAK
   {                                       //
-    Serial.print(now.minute());      // vypiš na sériovou linku minutu
+    Serial.print(now.minute());           // vypiš na sériovou linku minutu
   }
     Serial.print(':');                    // DVOJTEČKA
     if (now.second() < 10)                // KDYŽ SEKUNDA < 10
   {                                       //
     Serial.print('0');                    // vypiš na sériovou linku "0"
-    Serial.print(now.second());      // vypiš na sériovou linku sekundu
+    Serial.print(now.second());           // vypiš na sériovou linku sekundu
   }                                       //
     else                                  // JINAK
   {                                       //
-    Serial.print(now.second());      // vypiš na sériovou linku sekundu
+    Serial.print(now.second());           // vypiš na sériovou linku sekundu
   }
     if (isDay)                            // KDYŽ isDay = true
   {
@@ -421,17 +418,17 @@ void loop () {
     Serial.print(temp_Manual);            // vypiš na sériovou linku proměnnou temp_Manual
     Serial.print("°C");                   // vypiš na sériovou linku "°C"
 
-    Serial.print(" T_SENSOR: ");
-    Serial.print(temp_Sensor);
-    Serial.print("°C");
+    Serial.print(" T_SENSOR: ");          // vypiš na sériovou linku "T_SENSOR: "
+    Serial.print(temp_Sensor);            // vypiš na sériovou linku proměnnou temp_Sensor
+    Serial.print("°C");                   // vypiš na sériovou linku "°C"
     
-    Serial.print(" T_CORRECTED: ");
-    Serial.print(temp_Corrected);
-    Serial.print("°C");
+    Serial.print(" T_CORRECTED: ");       // vypiš na sériovou linku "T_CORRECTED: "
+    Serial.print(temp_Corrected);         // vypiš na sériovou linku proměnnou temp_Corrected
+    Serial.print("°C");                   // vypiš na sériovou linku "°C"
 
-    Serial.print(" T_AVERAGE: ");
-    Serial.print(temp_Average);
-    Serial.print("°C");
+    Serial.print(" T_AVERAGE: ");         // vypiš na sériovou linku "T_AVERAGE: "
+    Serial.print(temp_Average);           // vypiš na sériovou linku proměnnou temp_Average
+    Serial.print("°C");                   // vypiš na sériovou linku "°C"
 
 
   if (windowClosed) 
@@ -494,11 +491,11 @@ float movingAverage(float value) {
 
   sum += value;
 
-  // If the window is full, adjust the sum by deleting the oldest value
+                                                // If the window is full, adjust the sum by deleting the oldest value
   if (cvalues == nvalues)
     sum -= values[current];
 
-  values[current] = value;          // Replace the oldest with the latest
+  values[current] = value;                      // Replace the oldest with the latest
 
   if (++current >= nvalues)
     current = 0;
